@@ -13,7 +13,7 @@ load_dotenv()
 from .models import db, bcrypt
 
 # Import auth utils
-from .auth import is_token_blacklisted
+from .routes.auth import is_token_blacklisted
 
 def create_app():
     app = Flask(__name__)
@@ -34,7 +34,7 @@ def create_app():
     migrate = Migrate(app, db)
     
     # Configure CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
     
     # Register token blacklist loader
     @jwt.token_in_blocklist_loader
@@ -42,11 +42,7 @@ def create_app():
         return is_token_blacklisted(jwt_header, jwt_payload)
     
     # Register blueprints
-    from .routes import main
-    from .auth import auth
-    from .buyer_routes import buyer
-    from .seller_routes import seller
-    from .admin_routes import admin
+    from .routes import main, auth, buyer, seller, admin
     
     app.register_blueprint(main)
     app.register_blueprint(auth)

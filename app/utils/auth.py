@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import jsonify
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
-from .models import UserRole
+from ..models import UserRole
 
 def role_required(allowed_roles):
     """

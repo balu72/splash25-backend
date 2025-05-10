@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
-from .auth_utils import admin_required
-from .models import User, UserRole, db
+from ..utils.auth import admin_required
+from ..models import User, UserRole, db
 
 admin = Blueprint('admin', __name__, url_prefix='/api/admin')
 

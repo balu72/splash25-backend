@@ -7,7 +7,7 @@ from flask_jwt_extended import (
     get_jwt
 )
 from datetime import timedelta
-from .models import db, User, UserRole
+from ..models import db, User, UserRole
 
 auth = Blueprint('auth', __name__, url_prefix='/api/auth')
 

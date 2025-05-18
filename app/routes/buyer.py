@@ -93,6 +93,13 @@ def get_travel_plans():
     """
     user_id = get_jwt_identity()
     
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     # Fetch travel plans for the user
     travel_plans = TravelPlan.query.filter_by(user_id=user_id).all()
     
@@ -107,6 +114,14 @@ def update_outbound(plan_id):
     Endpoint to update outbound journey details
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -170,6 +185,14 @@ def update_return(plan_id):
     Endpoint to update return journey details
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -234,6 +257,14 @@ def update_accommodation(plan_id):
     Endpoint to update accommodation details
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -286,6 +317,14 @@ def update_pickup(plan_id):
     Endpoint to update pickup details
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -336,6 +375,14 @@ def update_dropoff(plan_id):
     Endpoint to update dropoff details
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -388,6 +435,13 @@ def get_meetings():
     """
     user_id = get_jwt_identity()
     
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     # Get query parameters for filtering
     status = request.args.get('status')
     from_date = request.args.get('from_date')
@@ -432,6 +486,14 @@ def create_meeting():
     Endpoint to create a new meeting request
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields
@@ -472,6 +534,14 @@ def update_meeting(meeting_id):
     Endpoint to update meeting status
     """
     user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate required fields

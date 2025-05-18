@@ -86,12 +86,12 @@ def login():
     
     # Create tokens
     access_token = create_access_token(
-        identity=user.id,
+        identity=str(user.id),  # Convert to string to avoid JWT issues
         additional_claims={'role': user.role.value},
         expires_delta=timedelta(hours=1)
     )
     refresh_token = create_refresh_token(
-        identity=user.id,
+        identity=str(user.id),  # Convert to string to avoid JWT issues
         additional_claims={'role': user.role.value},
         expires_delta=timedelta(days=30)
     )
@@ -106,6 +106,13 @@ def login():
 @jwt_required(refresh=True)
 def refresh():
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     user = User.query.get(current_user_id)
     
     if not user:
@@ -113,7 +120,7 @@ def refresh():
     
     # Create new access token
     access_token = create_access_token(
-        identity=user.id,
+        identity=str(user.id),  # Convert to string to avoid JWT issues
         additional_claims={'role': user.role.value},
         expires_delta=timedelta(hours=1)
     )
@@ -127,6 +134,13 @@ def refresh():
 @jwt_required()
 def get_current_user():
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     user = User.query.get(current_user_id)
     
     if not user:

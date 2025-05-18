@@ -6,8 +6,10 @@ from flask_jwt_extended import (
     get_jwt_identity,
     get_jwt
 )
-from datetime import timedelta
-from ..models import db, User, UserRole
+from datetime import datetime, timedelta
+import re
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction
+from ..utils.email_service import send_registration_confirmation_email
 
 auth = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -143,3 +145,113 @@ def logout():
 def is_token_blacklisted(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     return jti in token_blacklist
+
+@auth.route('/validate-invite/<token>', methods=['GET'])
+def validate_invite(token):
+    """Validate an invitation token"""
+    invited_buyer = InvitedBuyer.query.filter_by(invitation_token=token).first()
+    
+    if not invited_buyer:
+        return jsonify({'error': 'Invalid invitation token'}), 404
+    
+    if invited_buyer.is_registered:
+        return jsonify({'error': 'Invitation already used'}), 400
+    
+    if invited_buyer.expires_at < datetime.utcnow():
+        return jsonify({'error': 'Invitation expired'}), 400
+    
+    return jsonify({
+        'message': 'Invitation valid',
+        'invited_buyer': {
+            'name': invited_buyer.name,
+            'email': invited_buyer.email
+        }
+    }), 200
+
+@auth.route('/register-invited', methods=['POST'])
+def register_invited():
+    """Register an invited buyer"""
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = [
+        'token', 'name', 'designation', 'company', 'address', 'city', 'state', 
+        'pin', 'mobile', 'email', 'year_of_starting_business', 'type_of_operator',
+        'already_sell_wayanad', 'opinion_about_previous_splash', 
+        'reference_property1_name', 'reference_property1_address',
+        'interests', 'properties_of_interest', 'why_attend_splash2025'
+    ]
+    
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Validate invitation token
+    invited_buyer = InvitedBuyer.query.filter_by(invitation_token=data['token']).first()
+    
+    if not invited_buyer:
+        return jsonify({'error': 'Invalid invitation token'}), 404
+    
+    if invited_buyer.is_registered:
+        return jsonify({'error': 'Invitation already used'}), 400
+    
+    if invited_buyer.expires_at < datetime.utcnow():
+        return jsonify({'error': 'Invitation expired'}), 400
+    
+    # Validate email matches invitation
+    if data['email'].lower() != invited_buyer.email.lower():
+        return jsonify({'error': 'Email does not match invitation'}), 400
+    
+    # Check domain restriction if enabled
+    domain_restrictions = DomainRestriction.query.filter_by(is_enabled=True).all()
+    if domain_restrictions:
+        email_domain = data['email'].split('@')[-1].lower()
+        allowed_domains = [r.domain.lower() for r in domain_restrictions]
+        
+        if email_domain not in allowed_domains:
+            return jsonify({'error': 'Email domain not allowed'}), 400
+    
+    # Validate mobile number format
+    if not re.match(r'^\+\d{12}$', data['mobile']):
+        return jsonify({'error': 'Invalid mobile number format. Must be in format: +XXXXXXXXXXXX (12 digits after +)'}), 400
+    
+    # Create pending buyer
+    pending_buyer = PendingBuyer(
+        invited_buyer_id=invited_buyer.id,
+        name=data['name'],
+        designation=data['designation'],
+        company=data['company'],
+        gst=data.get('gst'),
+        address=data['address'],
+        city=data['city'],
+        state=data['state'],
+        pin=data['pin'],
+        mobile=data['mobile'],
+        email=data['email'],
+        website=data.get('website'),
+        instagram=data.get('instagram'),
+        year_of_starting_business=data['year_of_starting_business'],
+        type_of_operator=data['type_of_operator'],
+        already_sell_wayanad=data['already_sell_wayanad'],
+        since_when=data.get('since_when'),
+        opinion_about_previous_splash=data['opinion_about_previous_splash'],
+        property_stayed_in=data.get('property_stayed_in'),
+        reference_property1_name=data['reference_property1_name'],
+        reference_property1_address=data['reference_property1_address'],
+        reference_property2_name=data.get('reference_property2_name'),
+        reference_property2_address=data.get('reference_property2_address'),
+        interests=','.join(data['interests']),
+        properties_of_interest=','.join(data['properties_of_interest']),
+        why_attend_splash2025=data['why_attend_splash2025']
+    )
+    
+    db.session.add(pending_buyer)
+    db.session.commit()
+    
+    # Send confirmation email
+    send_registration_confirmation_email(pending_buyer)
+    
+    return jsonify({
+        'message': 'Registration submitted successfully',
+        'pending_buyer': pending_buyer.to_dict()
+    }), 201

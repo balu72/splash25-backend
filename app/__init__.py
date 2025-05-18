@@ -34,7 +34,15 @@ def create_app():
     migrate = Migrate(app, db)
     
     # Configure CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+    CORS(app, 
+         resources={r"/api/*": {
+             "origins": "http://localhost:8080",
+             "allow_headers": ["Content-Type", "Authorization"],
+             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+             "supports_credentials": True,
+             "allow_credentials": True,
+             "expose_headers": ["Content-Type", "Authorization"]
+         }})
     
     # Register token blacklist loader
     @jwt.token_in_blocklist_loader
@@ -42,13 +50,16 @@ def create_app():
         return is_token_blacklisted(jwt_header, jwt_payload)
     
     # Register blueprints
-    from .routes import main, auth, buyer, seller, admin
+    from .routes import main, auth, buyer, seller, admin, system, timeslot, meeting
     
     app.register_blueprint(main)
     app.register_blueprint(auth)
     app.register_blueprint(buyer)
     app.register_blueprint(seller)
     app.register_blueprint(admin)
+    app.register_blueprint(system)
+    app.register_blueprint(timeslot)
+    app.register_blueprint(meeting)
     
     # Create database tables
     with app.app_context():

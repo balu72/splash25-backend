@@ -39,3 +39,5 @@ def health_check():
         "status": "healthy",
         "message": "Splash25 API is running"
     })
+
+

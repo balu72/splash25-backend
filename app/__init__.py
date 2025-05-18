@@ -18,11 +18,8 @@ from .routes.auth import is_token_blacklisted
 def create_app():
     app = Flask(__name__)
 
-    #Initialise DB 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:splash25@localhost:5432/postgres'  
-    
     # Configure SQLAlchemy
-    #app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///splash25.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///splash25.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Configure JWT
@@ -58,5 +55,3 @@ def create_app():
         db.create_all()
     
     return app
-
-

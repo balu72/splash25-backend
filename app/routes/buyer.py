@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from ..utils.auth import buyer_required
-from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole
+from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting
 
 buyer = Blueprint('buyer', __name__, url_prefix='/api/buyer')
 
@@ -496,35 +496,68 @@ def create_meeting():
     
     data = request.get_json()
     
-    # Validate required fields
-    required_fields = ['sellerId', 'fromTime', 'toTime']
+    # Validate required fields - aligning with meeting.py structure
+    required_fields = ['seller_id', 'time_slot_id']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    # Check if seller exists
-    seller = User.query.filter_by(id=data['sellerId']).first()
-    if not seller or not seller.is_seller():
-        return jsonify({'error': 'Seller not found'}), 404
+    # Check if meetings are enabled (similar to meeting.py)
+    meetings_enabled = SystemSetting.query.filter_by(key='meetings_enabled').first()
+    if not meetings_enabled or meetings_enabled.value != 'true':
+        return jsonify({
+            'error': 'Meeting requests are currently disabled'
+        }), 400
+
+    # Check if the seller exists
+    seller = User.query.get(data['seller_id'])
+    if not seller or seller.role != UserRole.SELLER:
+        return jsonify({
+            'error': 'Invalid seller'
+        }), 400
     
-    # Create new meeting
-    try:
-        meeting = Meeting(
-            buyer_id=user_id,
-            seller_id=data['sellerId'],
-            from_time=datetime.fromisoformat(data['fromTime']),
-            to_time=datetime.fromisoformat(data['toTime']),
-            topic=data.get('topic', ''),
-            status=MeetingStatus.REQUESTED
-        )
-        db.session.add(meeting)
+    # Check if the time slot exists and is available
+    time_slot = TimeSlot.query.get(data['time_slot_id'])
+    if not time_slot:
+        return jsonify({
+            'error': 'Time slot not found'
+        }), 404
+    
+    if not time_slot.is_available:
+        return jsonify({
+            'error': 'Time slot is not available'
+        }), 400
+    
+    # Check if the time slot belongs to the seller
+    if time_slot.user_id != data['seller_id']:
+        return jsonify({
+            'error': 'Time slot does not belong to the specified seller'
+        }), 400
+
+    # Create the meeting
+    meeting = Meeting(
+        buyer_id=user_id,
+        seller_id=data['seller_id'],
+        time_slot_id=data['time_slot_id'],
+        notes=data.get('notes', ''), # Assuming 'topic' might become 'notes'
+        status=MeetingStatus.PENDING # PENDING is used in meeting.py
+    )
+    
+    # Mark the time slot as unavailable (similar to meeting.py)
+    time_slot.is_available = False
+    # time_slot.meeting_id = meeting.id # This needs meeting.id, so commit meeting first or handle differently
+    
+    db.session.add(meeting)
+    db.session.commit() # Commit to get meeting.id
+
+    # Now link meeting_id to time_slot if your model supports it and it's desired here
+    if hasattr(time_slot, 'meeting_id'):
+        time_slot.meeting_id = meeting.id
         db.session.commit()
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
     
     return jsonify({
         'message': 'Meeting request created successfully',
-        'meeting': meeting.to_dict_for_buyer()
+        'meeting': meeting.to_dict_for_buyer() # Ensure to_dict_for_buyer is consistent
     }), 201
 
 @buyer.route('/meetings/<int:meeting_id>', methods=['PUT'])

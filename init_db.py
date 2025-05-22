@@ -1,5 +1,5 @@
 from app import create_app
-from app.models import db, User, UserRole, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, Listing, ListingStatus, ListingDate
+from app.models import db, User, UserRole, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, Listing, ListingStatus, ListingDate, TimeSlot
 from datetime import datetime, timedelta, date
 
 def init_db():

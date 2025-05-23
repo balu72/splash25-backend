@@ -78,7 +78,24 @@ The application includes various other endpoints for buyers, sellers, and admins
 
 ## Database
 
-The application uses SQLite by default. The database file is located at `instance/splash25.db`.
+The application uses PostgreSQL. Make sure you have PostgreSQL running before starting the application.
+
+### PostgreSQL Setup
+
+1. Start the PostgreSQL container:
+   ```
+   cd ../spalsh25-db
+   docker-compose up -d
+   ```
+
+2. The database will be automatically initialized with the required schema when the Flask app starts.
+
+### Database Configuration
+
+The database connection is configured via the `DATABASE_URI` environment variable in the `.env` file:
+```
+DATABASE_URI=postgresql://splash25user:splash25password@localhost:5432/splash25
+```
 
 ## Adding New Users
 
@@ -87,13 +104,4 @@ If you need to add new users, you can use the provided scripts:
 - For admin users: `python3 add_admin.py`
 - For seller users: `python3 add_seller.py`
 - For buyer users: `python3 add_buyer.py`
-
-## Initializing the Database
-
-If you need to reset the database and initialize it with sample data, you can use:
-
-```
-python3 init_db.py
-```
-
-Note: This will only initialize the database if it's empty.
+- For multiple users: `python3 add_users.py`

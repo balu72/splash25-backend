@@ -431,6 +431,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    business_name = db.Column(db.String(120), nullable=True)
+    business_description = db.Column(db.Text, nullable=True)
+    is_verified = db.Column(db.Boolean, default=False)
     
     def __init__(self, username, email, password, role=UserRole.BUYER, **kwargs):
         self.username = username

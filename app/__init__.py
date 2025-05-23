@@ -50,7 +50,7 @@ def create_app():
         return is_token_blacklisted(jwt_header, jwt_payload)
     
     # Register blueprints
-    from .routes import main, auth, buyer, seller, admin, system, timeslot, meeting
+    from .routes import main, auth, buyer, seller, admin, system, timeslot, meeting, buyers
     
     app.register_blueprint(main)
     app.register_blueprint(auth)
@@ -60,6 +60,7 @@ def create_app():
     app.register_blueprint(system)
     app.register_blueprint(timeslot)
     app.register_blueprint(meeting)
+    app.register_blueprint(buyers)
     
     # Create database tables
     with app.app_context():

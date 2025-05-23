@@ -6,5 +6,6 @@ from .seller import seller
 from .system import system
 from .timeslot import timeslot
 from .meeting import meeting
+from .buyers import buyers
 
-__all__ = ['main', 'auth', 'admin', 'buyer', 'seller', 'system', 'timeslot', 'meeting']
+__all__ = ['main', 'auth', 'admin', 'buyer', 'seller', 'system', 'timeslot', 'meeting', 'buyers']

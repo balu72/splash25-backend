@@ -84,6 +84,15 @@ def update_profile():
     user_id = get_jwt_identity()
     data = request.get_json()
     
+    # Validate business name if provided
+    if 'business_name' in data:
+        business_name = data['business_name'].strip() if data['business_name'] else ''
+        if len(business_name) < 5:
+            return jsonify({
+                'error': 'Business name must be at least 5 characters long'
+            }), 400
+        data['business_name'] = business_name
+    
     # Find the seller profile
     seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
     
@@ -102,12 +111,18 @@ def update_profile():
         if field in data:
             setattr(seller_profile, field, data[field])
     
-    db.session.commit()
-    
-    return jsonify({
-        'message': 'Profile updated successfully',
-        'seller': seller_profile.to_dict()
-    }), 200
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'seller': seller_profile.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to update profile',
+            'message': str(e)
+        }), 500
 
 @seller.route('/types', methods=['GET'])
 @jwt_required()

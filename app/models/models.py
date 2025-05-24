@@ -23,6 +23,61 @@ class ListingStatus(enum.Enum):
     INACTIVE = "inactive"
     PENDING = "pending"
 
+class BuyerProfile(db.Model):
+    __tablename__ = 'buyer_profiles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    organization = db.Column(db.String(100), nullable=False)
+    designation = db.Column(db.String(50), nullable=True)
+    operator_type = db.Column(db.String(50), nullable=True)  # Tour Operator, Travel Agent, etc.
+    interests = db.Column(db.JSON, nullable=True)  # Array of interests
+    properties_of_interest = db.Column(db.JSON, nullable=True)  # Array of property types
+    country = db.Column(db.String(50), nullable=True)
+    state = db.Column(db.String(50), nullable=True)
+    city = db.Column(db.String(50), nullable=True)
+    address = db.Column(db.Text, nullable=True)
+    mobile = db.Column(db.String(20), nullable=True)
+    website = db.Column(db.String(255), nullable=True)
+    instagram = db.Column(db.String(100), nullable=True)
+    year_of_starting_business = db.Column(db.Integer, nullable=True)
+    selling_wayanad = db.Column(db.Boolean, default=False)
+    since_when = db.Column(db.Integer, nullable=True)
+    bio = db.Column(db.Text, nullable=True)
+    profile_image = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('buyer_profile', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'organization': self.organization,
+            'designation': self.designation,
+            'operator_type': self.operator_type,
+            'interests': self.interests or [],
+            'properties_of_interest': self.properties_of_interest or [],
+            'country': self.country,
+            'state': self.state,
+            'city': self.city,
+            'address': self.address,
+            'mobile': self.mobile,
+            'website': self.website,
+            'instagram': self.instagram,
+            'year_of_starting_business': self.year_of_starting_business,
+            'selling_wayanad': self.selling_wayanad,
+            'since_when': self.since_when,
+            'bio': self.bio,
+            'profile_image': self.profile_image,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class TravelPlan(db.Model):
     __tablename__ = 'travel_plans'
     
@@ -465,4 +520,40 @@ class User(db.Model):
             'email': self.email,
             'role': self.role.value,
             'created_at': self.created_at.isoformat()
+        }
+
+class Stall(db.Model):
+    __tablename__ = 'stalls'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    number = db.Column(db.String(20), nullable=False)
+    stall_type = db.Column(db.String(50), nullable=False)  # e.g., "Standard", "Premium", etc.
+    price = db.Column(db.Float, nullable=False)  # Price in INR
+    size = db.Column(db.String(50), nullable=False)  # e.g., "2m X 2m"
+    allowed_attendees = db.Column(db.Integer, nullable=False)
+    max_meetings_per_attendee = db.Column(db.Integer, nullable=False)
+    min_meetings_per_attendee = db.Column(db.Integer, nullable=False)
+    inclusions = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    
+    # Relationships
+    seller = db.relationship('User', backref=db.backref('stalls', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_id': self.seller_id,
+            'number': self.number,
+            'stall_type': self.stall_type,
+            'price': self.price,
+            'size': self.size,
+            'allowed_attendees': self.allowed_attendees,
+            'max_meetings_per_attendee': self.max_meetings_per_attendee,
+            'min_meetings_per_attendee': self.min_meetings_per_attendee,
+            'inclusions': self.inclusions,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'fascia_name': self.seller.seller_profile.business_name if self.seller.seller_profile else None
         }

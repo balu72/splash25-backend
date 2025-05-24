@@ -36,7 +36,7 @@ def create_app():
     # Configure CORS
     CORS(app, 
          resources={r"/api/*": {
-             "origins": "http://localhost:8080",
+             "origins": ["http://localhost:8080", "http://localhost:8081"],
              "allow_headers": ["Content-Type", "Authorization"],
              "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
              "supports_credentials": True,
@@ -51,6 +51,8 @@ def create_app():
     
     # Register blueprints
     from .routes import main, auth, buyer, seller, admin, system, timeslot, meeting, buyers
+    from .routes.health import health_bp
+    from .routes.stall import stall
     
     app.register_blueprint(main)
     app.register_blueprint(auth)
@@ -61,6 +63,8 @@ def create_app():
     app.register_blueprint(timeslot)
     app.register_blueprint(meeting)
     app.register_blueprint(buyers)
+    app.register_blueprint(stall)
+    app.register_blueprint(health_bp, url_prefix='/api')
     
     # Create database tables
     with app.app_context():

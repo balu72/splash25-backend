@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from ..utils.auth import buyer_required
-from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting
+from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting, BuyerProfile
 
 buyer = Blueprint('buyer', __name__, url_prefix='/api/buyer')
 
@@ -54,36 +54,146 @@ def dashboard():
 
 @buyer.route('/profile', methods=['GET'])
 @buyer_required
-def profile():
+def get_profile():
     """
     Endpoint to get buyer profile information
     """
-    # In a real application, you would fetch the user from the database
-    # based on the JWT identity
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get buyer profile
+    buyer_profile = BuyerProfile.query.filter_by(user_id=user_id).first()
+    
+    if not buyer_profile:
+        return jsonify({
+            'error': 'Buyer profile not found'
+        }), 404
+    
     return jsonify({
-        'message': 'Buyer profile information',
-        'profile': {
-            'preferences': {
-                'interests': ['Wildlife', 'Trekking', 'Cultural Experiences'],
-                'notification_settings': {
-                    'email': True,
-                    'sms': False
-                }
-            },
-            'recent_activity': [
-                {
-                    'type': 'viewed',
-                    'item': 'Wayanad Wildlife Sanctuary',
-                    'timestamp': '2025-05-08T14:30:00Z'
-                },
-                {
-                    'type': 'saved',
-                    'item': 'Chembra Peak Trek',
-                    'timestamp': '2025-05-07T09:15:00Z'
-                }
-            ]
-        }
+        'profile': buyer_profile.to_dict()
     }), 200
+
+@buyer.route('/profile', methods=['PUT'])
+@buyer_required
+def update_profile():
+    """
+    Endpoint to update buyer profile information
+    """
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    data = request.get_json()
+    
+    # Get or create buyer profile
+    buyer_profile = BuyerProfile.query.filter_by(user_id=user_id).first()
+    
+    if not buyer_profile:
+        # Create new profile
+        buyer_profile = BuyerProfile(user_id=user_id)
+        db.session.add(buyer_profile)
+    
+    # Update profile fields
+    updatable_fields = [
+        'name', 'organization', 'designation', 'operator_type', 
+        'interests', 'properties_of_interest', 'country', 'state', 
+        'city', 'address', 'mobile', 'website', 'instagram', 
+        'year_of_starting_business', 'selling_wayanad', 'since_when', 
+        'bio', 'profile_image'
+    ]
+    
+    for field in updatable_fields:
+        if field in data:
+            setattr(buyer_profile, field, data[field])
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'profile': buyer_profile.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to update profile: {str(e)}'
+        }), 500
+
+@buyer.route('/profile', methods=['POST'])
+@buyer_required
+def create_profile():
+    """
+    Endpoint to create buyer profile information
+    """
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    data = request.get_json()
+    
+    # Check if profile already exists
+    existing_profile = BuyerProfile.query.filter_by(user_id=user_id).first()
+    if existing_profile:
+        return jsonify({
+            'error': 'Profile already exists. Use PUT to update.'
+        }), 400
+    
+    # Validate required fields
+    required_fields = ['name', 'organization']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Create new profile
+    buyer_profile = BuyerProfile(
+        user_id=user_id,
+        name=data['name'],
+        organization=data['organization'],
+        designation=data.get('designation'),
+        operator_type=data.get('operator_type'),
+        interests=data.get('interests', []),
+        properties_of_interest=data.get('properties_of_interest', []),
+        country=data.get('country'),
+        state=data.get('state'),
+        city=data.get('city'),
+        address=data.get('address'),
+        mobile=data.get('mobile'),
+        website=data.get('website'),
+        instagram=data.get('instagram'),
+        year_of_starting_business=data.get('year_of_starting_business'),
+        selling_wayanad=data.get('selling_wayanad', False),
+        since_when=data.get('since_when'),
+        bio=data.get('bio'),
+        profile_image=data.get('profile_image')
+    )
+    
+    try:
+        db.session.add(buyer_profile)
+        db.session.commit()
+        return jsonify({
+            'message': 'Profile created successfully',
+            'profile': buyer_profile.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to create profile: {str(e)}'
+        }), 500
 
 @buyer.route('/travel-plans', methods=['GET'])
 @buyer_required
@@ -458,25 +568,11 @@ def get_meetings():
         except ValueError:
             return jsonify({'error': f'Invalid status: {status}'}), 400
     
-    if from_date:
-        try:
-            from_datetime = datetime.fromisoformat(from_date)
-            query = query.filter(Meeting.from_time >= from_datetime)
-        except ValueError:
-            return jsonify({'error': f'Invalid from_date format: {from_date}'}), 400
-    
-    if to_date:
-        try:
-            to_datetime = datetime.fromisoformat(to_date)
-            query = query.filter(Meeting.from_time <= to_datetime)
-        except ValueError:
-            return jsonify({'error': f'Invalid to_date format: {to_date}'}), 400
-    
     # Execute query
     meetings = query.all()
     
     return jsonify({
-        'meetings': [meeting.to_dict_for_buyer() for meeting in meetings]
+        'meetings': [meeting.to_dict() for meeting in meetings]
     }), 200
 
 @buyer.route('/meetings', methods=['POST'])
@@ -496,13 +592,13 @@ def create_meeting():
     
     data = request.get_json()
     
-    # Validate required fields - aligning with meeting.py structure
+    # Validate required fields
     required_fields = ['seller_id', 'time_slot_id']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    # Check if meetings are enabled (similar to meeting.py)
+    # Check if meetings are enabled
     meetings_enabled = SystemSetting.query.filter_by(key='meetings_enabled').first()
     if not meetings_enabled or meetings_enabled.value != 'true':
         return jsonify({
@@ -539,25 +635,24 @@ def create_meeting():
         buyer_id=user_id,
         seller_id=data['seller_id'],
         time_slot_id=data['time_slot_id'],
-        notes=data.get('notes', ''), # Assuming 'topic' might become 'notes'
-        status=MeetingStatus.PENDING # PENDING is used in meeting.py
+        notes=data.get('notes', ''),
+        status=MeetingStatus.PENDING
     )
     
-    # Mark the time slot as unavailable (similar to meeting.py)
+    # Mark the time slot as unavailable
     time_slot.is_available = False
-    # time_slot.meeting_id = meeting.id # This needs meeting.id, so commit meeting first or handle differently
     
     db.session.add(meeting)
-    db.session.commit() # Commit to get meeting.id
+    db.session.commit()
 
-    # Now link meeting_id to time_slot if your model supports it and it's desired here
+    # Link meeting_id to time_slot if supported
     if hasattr(time_slot, 'meeting_id'):
         time_slot.meeting_id = meeting.id
         db.session.commit()
     
     return jsonify({
         'message': 'Meeting request created successfully',
-        'meeting': meeting.to_dict_for_buyer() # Ensure to_dict_for_buyer is consistent
+        'meeting': meeting.to_dict()
     }), 201
 
 @buyer.route('/meetings/<int:meeting_id>', methods=['PUT'])
@@ -595,7 +690,7 @@ def update_meeting(meeting_id):
     
     return jsonify({
         'message': 'Meeting updated successfully',
-        'meeting': meeting.to_dict_for_buyer()
+        'meeting': meeting.to_dict()
     }), 200
 
 @buyer.route('/sellers', methods=['GET'])

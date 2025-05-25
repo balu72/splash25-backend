@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 from app.models import db
+from sqlalchemy import text
 
 health_bp = Blueprint('health', __name__)
 
@@ -8,7 +9,7 @@ def health_check():
     """Health check endpoint for Docker health checks"""
     try:
         # Test database connection
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         return jsonify({
             'status': 'healthy',
             'database': 'connected',

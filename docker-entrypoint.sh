@@ -30,7 +30,6 @@ echo "Setting up default users..."
 python -c "
 from app import create_app
 from app.models import db, User, UserRole
-from werkzeug.security import generate_password_hash
 app = create_app()
 with app.app_context():
     # Check if admin user exists
@@ -39,7 +38,7 @@ with app.app_context():
         admin = User(
             username='admin',
             email='admin@splash25.com',
-            password_hash=generate_password_hash('admin123'),
+            password='admin123',
             role=UserRole.ADMIN
         )
         db.session.add(admin)
@@ -51,7 +50,7 @@ with app.app_context():
         buyer = User(
             username='buyer',
             email='buyer@example.com',
-            password_hash=generate_password_hash('buyer123'),
+            password='buyer123',
             role=UserRole.BUYER
         )
         db.session.add(buyer)
@@ -63,7 +62,7 @@ with app.app_context():
         seller = User(
             username='seller',
             email='seller@example.com',
-            password_hash=generate_password_hash('seller123'),
+            password='seller123',
             role=UserRole.SELLER
         )
         db.session.add(seller)

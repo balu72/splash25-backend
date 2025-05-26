@@ -339,6 +339,52 @@ class Stall(db.Model):
             'seller_business_name': self.seller.seller_profile.business_name if self.seller and self.seller.seller_profile else None
         }
 
+# Additional enhanced models for financial and business info
+
+class BuyerFinancialInfo(db.Model):
+    __tablename__ = 'buyer_financial_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_profile_id = db.Column(db.Integer, db.ForeignKey('buyer_profiles.id'), nullable=False)
+    deposit_paid = db.Column(db.Boolean, default=False)
+    entry_fee_paid = db.Column(db.Boolean, default=False)
+    payment_date = db.Column(db.DateTime, nullable=True)
+    payment_reference = db.Column(db.String(100), nullable=True)
+    
+    buyer_profile = db.relationship('BuyerProfile', backref=db.backref('financial_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'buyer_profile_id': self.buyer_profile_id,
+            'deposit_paid': self.deposit_paid,
+            'entry_fee_paid': self.entry_fee_paid,
+            'payment_date': self.payment_date.isoformat() if self.payment_date else None,
+            'payment_reference': self.payment_reference
+        }
+
+class SellerFinancialInfo(db.Model):
+    __tablename__ = 'seller_financial_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'), nullable=False)
+    total_amt_due = db.Column(db.Numeric(10, 2), default=0.00)
+    total_amt_paid = db.Column(db.Numeric(10, 2), default=0.00)
+    deposit_paid = db.Column(db.Boolean, default=False)
+    subscription_uptodate = db.Column(db.Boolean, default=False)
+    
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('financial_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_profile_id': self.seller_profile_id,
+            'total_amt_due': float(self.total_amt_due),
+            'total_amt_paid': float(self.total_amt_paid),
+            'deposit_paid': self.deposit_paid,
+            'subscription_uptodate': self.subscription_uptodate
+        }
+
 # Keep all existing models for backward compatibility
 
 class Meeting(db.Model):
@@ -421,6 +467,7 @@ class SystemSetting(db.Model):
             'description': self.description
         }
 
+# Additional models for complete backward compatibility
 class TravelPlan(db.Model):
     __tablename__ = 'travel_plans'
     
@@ -434,67 +481,6 @@ class TravelPlan(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     user = db.relationship('User', backref=db.backref('travel_plans', lazy=True))
-    transportation = db.relationship('Transportation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
-    accommodation = db.relationship('Accommodation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
-    ground_transportation = db.relationship('GroundTransportation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
-
-class Transportation(db.Model):
-    __tablename__ = 'transportation'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    travel_plan_id = db.Column(db.Integer, db.ForeignKey('travel_plans.id'), nullable=False)
-    type = db.Column(db.String(20), nullable=False)
-    
-    # Outbound journey
-    outbound_carrier = db.Column(db.String(100), nullable=False)
-    outbound_number = db.Column(db.String(20), nullable=False)
-    outbound_departure_location = db.Column(db.String(200), nullable=False)
-    outbound_departure_datetime = db.Column(db.DateTime, nullable=False)
-    outbound_arrival_location = db.Column(db.String(200), nullable=False)
-    outbound_arrival_datetime = db.Column(db.DateTime, nullable=False)
-    outbound_booking_reference = db.Column(db.String(50), nullable=False)
-    outbound_seat_info = db.Column(db.String(50), nullable=True)
-    
-    # Return journey
-    return_carrier = db.Column(db.String(100), nullable=False)
-    return_number = db.Column(db.String(20), nullable=False)
-    return_departure_location = db.Column(db.String(200), nullable=False)
-    return_departure_datetime = db.Column(db.DateTime, nullable=False)
-    return_arrival_location = db.Column(db.String(200), nullable=False)
-    return_arrival_datetime = db.Column(db.DateTime, nullable=False)
-    return_booking_reference = db.Column(db.String(50), nullable=False)
-    return_seat_info = db.Column(db.String(50), nullable=True)
-
-class Accommodation(db.Model):
-    __tablename__ = 'accommodations'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    travel_plan_id = db.Column(db.Integer, db.ForeignKey('travel_plans.id'), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
-    address = db.Column(db.Text, nullable=False)
-    check_in_datetime = db.Column(db.DateTime, nullable=False)
-    check_out_datetime = db.Column(db.DateTime, nullable=False)
-    room_type = db.Column(db.String(100), nullable=False)
-    booking_reference = db.Column(db.String(50), nullable=False)
-    special_notes = db.Column(db.Text, nullable=True)
-
-class GroundTransportation(db.Model):
-    __tablename__ = 'ground_transportation'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    travel_plan_id = db.Column(db.Integer, db.ForeignKey('travel_plans.id'), nullable=False)
-    
-    # Pickup details
-    pickup_location = db.Column(db.String(200), nullable=False)
-    pickup_datetime = db.Column(db.DateTime, nullable=False)
-    pickup_vehicle_type = db.Column(db.String(50), nullable=True)
-    pickup_driver_contact = db.Column(db.String(50), nullable=True)
-    
-    # Dropoff details
-    dropoff_location = db.Column(db.String(200), nullable=False)
-    dropoff_datetime = db.Column(db.DateTime, nullable=False)
-    dropoff_vehicle_type = db.Column(db.String(50), nullable=True)
-    dropoff_driver_contact = db.Column(db.String(50), nullable=True)
 
 class Listing(db.Model):
     __tablename__ = 'listings'
@@ -514,14 +500,6 @@ class Listing(db.Model):
     bookings = db.Column(db.Integer, default=0)
     
     seller = db.relationship('User', backref=db.backref('listings', lazy=True))
-    available_dates = db.relationship('ListingDate', backref='listing', lazy=True, cascade='all, delete-orphan')
-
-class ListingDate(db.Model):
-    __tablename__ = 'listing_dates'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    listing_id = db.Column(db.Integer, db.ForeignKey('listings.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
 
 class InvitedBuyer(db.Model):
     __tablename__ = 'invited_buyers'

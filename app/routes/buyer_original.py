@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from ..utils.auth import buyer_required
-from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting, BuyerProfile, BuyerCategory, PropertyType, Interest, StallType
+from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting, BuyerProfile
 
 buyer = Blueprint('buyer', __name__, url_prefix='/api/buyer')
 
@@ -104,17 +104,13 @@ def update_profile():
         buyer_profile = BuyerProfile(user_id=user_id)
         db.session.add(buyer_profile)
     
-    # Update profile fields (including enhanced fields)
+    # Update profile fields
     updatable_fields = [
-        # Legacy fields
         'name', 'organization', 'designation', 'operator_type', 
         'interests', 'properties_of_interest', 'country', 'state', 
         'city', 'address', 'mobile', 'website', 'instagram', 
         'year_of_starting_business', 'selling_wayanad', 'since_when', 
-        'bio', 'profile_image',
-        # Enhanced fields
-        'category_id', 'salutation', 'first_name', 'last_name', 
-        'vip', 'status', 'gst', 'pincode'
+        'bio', 'profile_image'
     ]
     
     for field in updatable_fields:
@@ -163,10 +159,9 @@ def create_profile():
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    # Create new profile with enhanced fields support
+    # Create new profile
     buyer_profile = BuyerProfile(
         user_id=user_id,
-        # Legacy fields
         name=data['name'],
         organization=data['organization'],
         designation=data.get('designation'),
@@ -184,16 +179,7 @@ def create_profile():
         selling_wayanad=data.get('selling_wayanad', False),
         since_when=data.get('since_when'),
         bio=data.get('bio'),
-        profile_image=data.get('profile_image'),
-        # Enhanced fields
-        category_id=data.get('category_id'),
-        salutation=data.get('salutation'),
-        first_name=data.get('first_name'),
-        last_name=data.get('last_name'),
-        vip=data.get('vip', False),
-        status=data.get('status', 'pending'),
-        gst=data.get('gst'),
-        pincode=data.get('pincode')
+        profile_image=data.get('profile_image')
     )
     
     try:
@@ -207,59 +193,6 @@ def create_profile():
         db.session.rollback()
         return jsonify({
             'error': f'Failed to create profile: {str(e)}'
-        }), 500
-
-# Enhanced Model Endpoints
-
-@buyer.route('/categories', methods=['GET'])
-@buyer_required
-def get_buyer_categories():
-    """
-    Endpoint to get all buyer categories
-    """
-    try:
-        categories = BuyerCategory.query.all()
-        return jsonify({
-            'categories': [category.to_dict() for category in categories]
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'error': f'Failed to fetch categories: {str(e)}'
-        }), 500
-
-@buyer.route('/categories/<int:category_id>', methods=['GET'])
-@buyer_required
-def get_buyer_category(category_id):
-    """
-    Endpoint to get a specific buyer category
-    """
-    try:
-        category = BuyerCategory.query.get(category_id)
-        if not category:
-            return jsonify({'error': 'Category not found'}), 404
-        
-        return jsonify({
-            'category': category.to_dict()
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'error': f'Failed to fetch category: {str(e)}'
-        }), 500
-
-@buyer.route('/interests', methods=['GET'])
-@buyer_required
-def get_interests():
-    """
-    Endpoint to get all available interests
-    """
-    try:
-        interests = Interest.query.all()
-        return jsonify({
-            'interests': [interest.to_dict() for interest in interests]
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'error': f'Failed to fetch interests: {str(e)}'
         }), 500
 
 @buyer.route('/travel-plans', methods=['GET'])

@@ -19,7 +19,7 @@ def create_app():
     app = Flask(__name__)
 
     # Configure SQLAlchemy
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25_core_db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Configure JWT
@@ -36,7 +36,12 @@ def create_app():
     # Configure CORS
     CORS(app, 
          resources={r"/api/*": {
-             "origins": ["http://localhost:8080", "http://localhost:8081"],
+             "origins": [
+                 "http://localhost:3000",  # React dev server
+                 "http://localhost:5173",  # Vite dev server
+                 "http://localhost:8080",  # Vue dev server
+                 "http://localhost:8081"   # Alternative dev server
+             ],
              "allow_headers": ["Content-Type", "Authorization"],
              "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
              "supports_credentials": True,
@@ -66,8 +71,12 @@ def create_app():
     app.register_blueprint(stall)
     app.register_blueprint(health_bp, url_prefix='/api')
     
-    # Create database tables
+    # Create database tables (only if database is available)
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+        except Exception as e:
+            # Database not available - this is fine for testing configuration
+            app.logger.warning(f"Database not available during initialization: {e}")
     
     return app

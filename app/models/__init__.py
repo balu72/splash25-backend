@@ -3,7 +3,8 @@ from .models import (
     UserRole, MeetingStatus, ListingStatus,
     TravelPlan, Transportation, Accommodation, GroundTransportation,
     Meeting, Listing, ListingDate, User, InvitedBuyer, PendingBuyer, DomainRestriction,
-    SellerProfile, BuyerProfile, SystemSetting, TimeSlot, Stall
+    SellerProfile, BuyerProfile, SystemSetting, TimeSlot, Stall,
+    BuyerCategory, PropertyType, Interest, StallType
 )
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     'UserRole', 'MeetingStatus', 'ListingStatus',
     'TravelPlan', 'Transportation', 'Accommodation', 'GroundTransportation',
     'Meeting', 'Listing', 'ListingDate', 'User', 'InvitedBuyer', 'PendingBuyer', 'DomainRestriction',
-    'SellerProfile', 'BuyerProfile', 'SystemSetting', 'TimeSlot', 'Stall'
+    'SellerProfile', 'BuyerProfile', 'SystemSetting', 'TimeSlot', 'Stall',
+    'BuyerCategory', 'PropertyType', 'Interest', 'StallType'
 ]

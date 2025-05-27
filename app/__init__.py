@@ -17,6 +17,7 @@ from .routes.auth import is_token_blacklisted
 
 def create_app():
     app = Flask(__name__)
+    CORS(app)
 
     # Configure SQLAlchemy
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25_core_db')
@@ -34,6 +35,7 @@ def create_app():
     migrate = Migrate(app, db)
     
     # Configure CORS
+    """
     CORS(app, 
          resources={r"/api/*": {
              "origins": [
@@ -48,7 +50,7 @@ def create_app():
              "allow_credentials": True,
              "expose_headers": ["Content-Type", "Authorization"]
          }})
-    
+    """
     # Register token blacklist loader
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):

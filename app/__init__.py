@@ -34,23 +34,6 @@ def create_app():
     jwt = JWTManager(app)
     migrate = Migrate(app, db)
     
-    # Configure CORS
-    """
-    CORS(app, 
-         resources={r"/api/*": {
-             "origins": [
-                 "http://localhost:3000",  # React dev server
-                 "http://localhost:5173",  # Vite dev server
-                 "http://localhost:8080",  # Vue dev server
-                 "http://localhost:8081"   # Alternative dev server
-             ],
-             "allow_headers": ["Content-Type", "Authorization"],
-             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "supports_credentials": True,
-             "allow_credentials": True,
-             "expose_headers": ["Content-Type", "Authorization"]
-         }})
-    """
     # Register token blacklist loader
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):

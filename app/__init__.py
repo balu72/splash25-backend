@@ -18,6 +18,7 @@ from .routes.auth import is_token_blacklisted
 def create_app():
     app = Flask(__name__)
     CORS(app)
+    CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:80","http://localhost:8080", "http://dechivo.com", "https://dechivo.com"]}})
 
     # Configure SQLAlchemy
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25_core_db')

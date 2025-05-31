@@ -115,7 +115,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.BUYER)
+    role = db.Column(db.String(10), nullable=False, default=UserRole.BUYER.value)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     business_name = db.Column(db.String(120), nullable=True)
     business_description = db.Column(db.Text, nullable=True)
@@ -125,7 +125,7 @@ class User(db.Model):
         self.username = username
         self.email = email
         self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-        self.role = role
+        self.role = role.value if isinstance(role, UserRole) else role
         
         for key, value in kwargs.items():
             if hasattr(self, key):
@@ -135,20 +135,20 @@ class User(db.Model):
         return bcrypt.check_password_hash(self.password_hash, password)
     
     def is_buyer(self):
-        return self.role == UserRole.BUYER
+        return self.role == UserRole.BUYER.value
     
     def is_seller(self):
-        return self.role == UserRole.SELLER
+        return self.role == UserRole.SELLER.value
     
     def is_admin(self):
-        return self.role == UserRole.ADMIN
+        return self.role == UserRole.ADMIN.value
     
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
-            'role': self.role.value,
+            'role': self.role,
             'created_at': self.created_at.isoformat()
         }
 

@@ -1,5 +1,6 @@
 import os
-from flask import Flask
+import logging
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
@@ -17,12 +18,29 @@ from .routes.auth import is_token_blacklisted
 
 def create_app():
     app = Flask(__name__)
+    
+    # Configure logging for debug mode
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s %(levelname)s %(name)s %(message)s'
+    )
+    app.logger.setLevel(logging.DEBUG)
+    
+    # Log all incoming requests
+    @app.before_request
+    def log_request_info():
+        app.logger.debug('Request: %s %s', request.method, request.url)
+        app.logger.debug('Headers: %s', dict(request.headers))
+        if request.get_data():
+            app.logger.debug('Body: %s', request.get_data())
+    
     CORS(app)
-    CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:80","http://localhost:8080", "http://dechivo.com", "https://dechivo.com"]}})
+    CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:80","http://localhost:8080", "http://dechivo.com", "https://dechivo.com", "http://splash25-frontend:8080", "http://frontend:8080"]}})
 
     # Configure SQLAlchemy
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25_core_db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ECHO'] = os.getenv('SQLALCHEMY_ECHO', 'False').lower() == 'true'
     
     # Configure JWT
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-key')

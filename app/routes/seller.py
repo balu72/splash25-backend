@@ -15,7 +15,7 @@ def get_sellers():
     target_market = request.args.get('target_market', '')
     
     # Start with a query for all sellers
-    query = SellerProfile.query.join(User).filter(User.role == UserRole.SELLER)
+    query = SellerProfile.query.join(User).filter(User.role == 'seller')
     
     # Apply filters if provided
     if name:
@@ -48,7 +48,7 @@ def get_seller(seller_id):
     
     # Check if the associated user is actually a seller
     user = User.query.get(seller_id)
-    if not user or user.role != UserRole.SELLER:
+    if not user or user.role != 'seller':
         return jsonify({
             'error': 'User is not a seller'
         }), 400
@@ -163,7 +163,7 @@ def verify_seller(seller_id):
     
     # Check if the associated user is actually a seller
     user = User.query.get(seller_id)
-    if not user or user.role != UserRole.SELLER:
+    if not user or user.role != 'seller':
         return jsonify({
             'error': 'User is not a seller'
         }), 400

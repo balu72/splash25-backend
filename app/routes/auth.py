@@ -87,12 +87,12 @@ def login():
     # Create tokens
     access_token = create_access_token(
         identity=str(user.id),  # Convert to string to avoid JWT issues
-        additional_claims={'role': user.role.value},
+        additional_claims={'role': user.role},
         expires_delta=timedelta(hours=1)
     )
     refresh_token = create_refresh_token(
         identity=str(user.id),  # Convert to string to avoid JWT issues
-        additional_claims={'role': user.role.value},
+        additional_claims={'role': user.role},
         expires_delta=timedelta(days=30)
     )
     
@@ -121,7 +121,7 @@ def refresh():
     # Create new access token
     access_token = create_access_token(
         identity=str(user.id),  # Convert to string to avoid JWT issues
-        additional_claims={'role': user.role.value},
+        additional_claims={'role': user.role},
         expires_delta=timedelta(hours=1)
     )
     

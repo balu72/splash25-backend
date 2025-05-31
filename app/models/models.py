@@ -438,6 +438,21 @@ class TravelPlan(db.Model):
     transportation = db.relationship('Transportation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
     accommodation = db.relationship('Accommodation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
     ground_transportation = db.relationship('GroundTransportation', backref='travel_plan', uselist=False, cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'event_name': self.event_name,
+            'event_start_date': self.event_start_date.isoformat() if self.event_start_date else None,
+            'event_end_date': self.event_end_date.isoformat() if self.event_end_date else None,
+            'venue': self.venue,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'transportation': self.transportation.to_dict() if self.transportation else None,
+            'accommodation': self.accommodation.to_dict() if self.accommodation else None,
+            'ground_transportation': self.ground_transportation.to_dict() if self.ground_transportation else None
+        }
 
 class Transportation(db.Model):
     __tablename__ = 'transportation'
@@ -465,6 +480,33 @@ class Transportation(db.Model):
     return_arrival_datetime = db.Column(db.DateTime, nullable=False)
     return_booking_reference = db.Column(db.String(50), nullable=False)
     return_seat_info = db.Column(db.String(50), nullable=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'travel_plan_id': self.travel_plan_id,
+            'type': self.type,
+            'outbound': {
+                'carrier': self.outbound_carrier,
+                'number': self.outbound_number,
+                'departure_location': self.outbound_departure_location,
+                'departure_datetime': self.outbound_departure_datetime.isoformat() if self.outbound_departure_datetime else None,
+                'arrival_location': self.outbound_arrival_location,
+                'arrival_datetime': self.outbound_arrival_datetime.isoformat() if self.outbound_arrival_datetime else None,
+                'booking_reference': self.outbound_booking_reference,
+                'seat_info': self.outbound_seat_info
+            },
+            'return': {
+                'carrier': self.return_carrier,
+                'number': self.return_number,
+                'departure_location': self.return_departure_location,
+                'departure_datetime': self.return_departure_datetime.isoformat() if self.return_departure_datetime else None,
+                'arrival_location': self.return_arrival_location,
+                'arrival_datetime': self.return_arrival_datetime.isoformat() if self.return_arrival_datetime else None,
+                'booking_reference': self.return_booking_reference,
+                'seat_info': self.return_seat_info
+            }
+        }
 
 class Accommodation(db.Model):
     __tablename__ = 'accommodations'
@@ -478,6 +520,19 @@ class Accommodation(db.Model):
     room_type = db.Column(db.String(100), nullable=False)
     booking_reference = db.Column(db.String(50), nullable=False)
     special_notes = db.Column(db.Text, nullable=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'travel_plan_id': self.travel_plan_id,
+            'name': self.name,
+            'address': self.address,
+            'check_in_datetime': self.check_in_datetime.isoformat() if self.check_in_datetime else None,
+            'check_out_datetime': self.check_out_datetime.isoformat() if self.check_out_datetime else None,
+            'room_type': self.room_type,
+            'booking_reference': self.booking_reference,
+            'special_notes': self.special_notes
+        }
 
 class GroundTransportation(db.Model):
     __tablename__ = 'ground_transportation'
@@ -496,6 +551,24 @@ class GroundTransportation(db.Model):
     dropoff_datetime = db.Column(db.DateTime, nullable=False)
     dropoff_vehicle_type = db.Column(db.String(50), nullable=True)
     dropoff_driver_contact = db.Column(db.String(50), nullable=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'travel_plan_id': self.travel_plan_id,
+            'pickup': {
+                'location': self.pickup_location,
+                'datetime': self.pickup_datetime.isoformat() if self.pickup_datetime else None,
+                'vehicle_type': self.pickup_vehicle_type,
+                'driver_contact': self.pickup_driver_contact
+            },
+            'dropoff': {
+                'location': self.dropoff_location,
+                'datetime': self.dropoff_datetime.isoformat() if self.dropoff_datetime else None,
+                'vehicle_type': self.dropoff_vehicle_type,
+                'driver_contact': self.dropoff_driver_contact
+            }
+        }
 
 class Listing(db.Model):
     __tablename__ = 'listings'

@@ -19,11 +19,11 @@ def get_meetings():
         }), 404
     
     # Get meetings based on user role
-    if user.role == UserRole.BUYER:
+    if user.role == UserRole.BUYER.value:
         meetings = Meeting.query.filter_by(buyer_id=user_id).all()
-    elif user.role == UserRole.SELLER:
+    elif user.role == UserRole.SELLER.value:
         meetings = Meeting.query.filter_by(seller_id=user_id).all()
-    elif user.role == UserRole.ADMIN:
+    elif user.role == UserRole.ADMIN.value:
         # Admins can see all meetings
         meetings = Meeting.query.all()
     else:
@@ -55,12 +55,12 @@ def get_meeting(meeting_id):
         }), 404
     
     # Check if the user has permission to view this meeting
-    if user.role == UserRole.BUYER and meeting.buyer_id != user_id:
+    if user.role == UserRole.BUYER.value and meeting.buyer_id != user_id:
         return jsonify({
             'error': 'You do not have permission to view this meeting'
         }), 403
     
-    if user.role == UserRole.SELLER and meeting.seller_id != user_id:
+    if user.role == UserRole.SELLER.value and meeting.seller_id != user_id:
         return jsonify({
             'error': 'You do not have permission to view this meeting'
         }), 403
@@ -94,7 +94,7 @@ def create_meeting():
     
     # Check if the seller exists
     seller = User.query.get(data['seller_id'])
-    if not seller or seller.role != UserRole.SELLER:
+    if not seller or seller.role != UserRole.SELLER.value:
         return jsonify({
             'error': 'Invalid seller'
         }), 400

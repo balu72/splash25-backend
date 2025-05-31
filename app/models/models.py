@@ -375,7 +375,8 @@ class Meeting(db.Model):
             'seller': {
                 'id': self.seller.id,
                 'username': self.seller.username,
-                'email': self.seller.email
+                'email': self.seller.email,
+                'business_name': self.seller.seller_profile.business_name if self.seller.seller_profile else self.seller.business_name
             },
             'time_slot': self.time_slot.to_dict() if self.time_slot else None
         }

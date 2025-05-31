@@ -459,7 +459,11 @@ class Transportation(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     travel_plan_id = db.Column(db.Integer, db.ForeignKey('travel_plans.id'), nullable=False)
-    type = db.Column(db.String(20), nullable=False)
+    type = db.Column(db.String(20), nullable=False)  # Primary transportation type
+    
+    # Individual transportation types for outbound and return journeys
+    outbound_type = db.Column(db.String(20), nullable=True)  # Can be different from main type
+    return_type = db.Column(db.String(20), nullable=True)    # Can be different from main type
     
     # Outbound journey
     outbound_carrier = db.Column(db.String(100), nullable=False)
@@ -487,6 +491,7 @@ class Transportation(db.Model):
             'travel_plan_id': self.travel_plan_id,
             'type': self.type,
             'outbound': {
+                'type': self.outbound_type or self.type,  # Use individual type or fall back to main type
                 'carrier': self.outbound_carrier,
                 'number': self.outbound_number,
                 'departure_location': self.outbound_departure_location,
@@ -497,6 +502,7 @@ class Transportation(db.Model):
                 'seat_info': self.outbound_seat_info
             },
             'return': {
+                'type': self.return_type or self.type,  # Use individual type or fall back to main type
                 'carrier': self.return_carrier,
                 'number': self.return_number,
                 'departure_location': self.return_departure_location,

@@ -313,12 +313,15 @@ def update_outbound(plan_id):
     if not travel_plan:
         return jsonify({'error': 'Travel plan not found or access denied'}), 404
     
+    # Determine transportation type from data - preserve existing type if not provided
+    transport_type = data.get('type', travel_plan.transportation.type if travel_plan.transportation else 'flight').lower()
+    
     # Update outbound journey details
     if not travel_plan.transportation:
         # Create new transportation record if it doesn't exist
         transportation = Transportation(
             travel_plan_id=plan_id,
-            type='flight',  # Default type
+            type=transport_type,
             outbound_carrier=data['carrier'],
             outbound_number=data['number'],
             outbound_departure_location=data['departureLocation'],
@@ -339,6 +342,7 @@ def update_outbound(plan_id):
         db.session.add(transportation)
     else:
         # Update existing transportation record
+        travel_plan.transportation.type = transport_type
         travel_plan.transportation.outbound_carrier = data['carrier']
         travel_plan.transportation.outbound_number = data['number']
         travel_plan.transportation.outbound_departure_location = data['departureLocation']
@@ -384,12 +388,15 @@ def update_return(plan_id):
     if not travel_plan:
         return jsonify({'error': 'Travel plan not found or access denied'}), 404
     
+    # Determine transportation type from data - preserve existing type if not provided
+    transport_type = data.get('type', travel_plan.transportation.type if travel_plan.transportation else 'flight').lower()
+    
     # Update return journey details
     if not travel_plan.transportation:
         # Create new transportation record if it doesn't exist
         transportation = Transportation(
             travel_plan_id=plan_id,
-            type='flight',  # Default type
+            type=transport_type,
             # Set default values for outbound journey
             outbound_carrier='',
             outbound_number='',
@@ -411,6 +418,7 @@ def update_return(plan_id):
         db.session.add(transportation)
     else:
         # Update existing transportation record
+        travel_plan.transportation.type = transport_type
         travel_plan.transportation.return_carrier = data['carrier']
         travel_plan.transportation.return_number = data['number']
         travel_plan.transportation.return_departure_location = data['departureLocation']
@@ -426,6 +434,119 @@ def update_return(plan_id):
         'message': 'Return journey updated successfully',
         'travel_plan': travel_plan.to_dict()
     }), 200
+
+@buyer.route('/travel-plans/<int:plan_id>/transportation', methods=['PUT'])
+@buyer_required
+def update_transportation(plan_id):
+    """
+    Endpoint to update both outbound and return transportation details in a single transaction
+    """
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    data = request.get_json()
+    
+    # Validate required fields for both outbound and return
+    required_outbound_fields = ['outbound.carrier', 'outbound.number', 'outbound.departureLocation', 
+                               'outbound.departureDateTime', 'outbound.arrivalLocation', 
+                               'outbound.arrivalDateTime', 'outbound.bookingReference']
+    required_return_fields = ['return.carrier', 'return.number', 'return.departureLocation', 
+                             'return.departureDateTime', 'return.arrivalLocation', 
+                             'return.arrivalDateTime', 'return.bookingReference']
+    
+    # Check outbound fields
+    for field in required_outbound_fields:
+        keys = field.split('.')
+        if keys[0] not in data or keys[1] not in data[keys[0]]:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Check return fields
+    for field in required_return_fields:
+        keys = field.split('.')
+        if keys[0] not in data or keys[1] not in data[keys[0]]:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Fetch travel plan
+    travel_plan = TravelPlan.query.filter_by(id=plan_id, user_id=user_id).first()
+    if not travel_plan:
+        return jsonify({'error': 'Travel plan not found or access denied'}), 404
+    
+    # Get transportation type from data
+    transport_type = data.get('type', 'flight').lower()
+    
+    try:
+        # Update transportation details in a single transaction
+        if not travel_plan.transportation:
+            # Create new transportation record if it doesn't exist
+            transportation = Transportation(
+                travel_plan_id=plan_id,
+                type=transport_type,
+                # Individual transportation types
+                outbound_type=data['outbound'].get('type', transport_type).lower(),
+                return_type=data['return'].get('type', transport_type).lower(),
+                # Outbound journey
+                outbound_carrier=data['outbound']['carrier'],
+                outbound_number=data['outbound']['number'],
+                outbound_departure_location=data['outbound']['departureLocation'],
+                outbound_departure_datetime=datetime.fromisoformat(data['outbound']['departureDateTime']),
+                outbound_arrival_location=data['outbound']['arrivalLocation'],
+                outbound_arrival_datetime=datetime.fromisoformat(data['outbound']['arrivalDateTime']),
+                outbound_booking_reference=data['outbound']['bookingReference'],
+                outbound_seat_info=data['outbound'].get('seatInfo', ''),
+                # Return journey
+                return_carrier=data['return']['carrier'],
+                return_number=data['return']['number'],
+                return_departure_location=data['return']['departureLocation'],
+                return_departure_datetime=datetime.fromisoformat(data['return']['departureDateTime']),
+                return_arrival_location=data['return']['arrivalLocation'],
+                return_arrival_datetime=datetime.fromisoformat(data['return']['arrivalDateTime']),
+                return_booking_reference=data['return']['bookingReference'],
+                return_seat_info=data['return'].get('seatInfo', '')
+            )
+            db.session.add(transportation)
+        else:
+            # Update existing transportation record (SINGLE UPDATE - FIXES DUPLICATE ISSUE)
+            travel_plan.transportation.type = transport_type
+            # Individual transportation types
+            travel_plan.transportation.outbound_type = data['outbound'].get('type', transport_type).lower()
+            travel_plan.transportation.return_type = data['return'].get('type', transport_type).lower()
+            # Outbound journey
+            travel_plan.transportation.outbound_carrier = data['outbound']['carrier']
+            travel_plan.transportation.outbound_number = data['outbound']['number']
+            travel_plan.transportation.outbound_departure_location = data['outbound']['departureLocation']
+            travel_plan.transportation.outbound_departure_datetime = datetime.fromisoformat(data['outbound']['departureDateTime'])
+            travel_plan.transportation.outbound_arrival_location = data['outbound']['arrivalLocation']
+            travel_plan.transportation.outbound_arrival_datetime = datetime.fromisoformat(data['outbound']['arrivalDateTime'])
+            travel_plan.transportation.outbound_booking_reference = data['outbound']['bookingReference']
+            travel_plan.transportation.outbound_seat_info = data['outbound'].get('seatInfo', '')
+            # Return journey
+            travel_plan.transportation.return_carrier = data['return']['carrier']
+            travel_plan.transportation.return_number = data['return']['number']
+            travel_plan.transportation.return_departure_location = data['return']['departureLocation']
+            travel_plan.transportation.return_departure_datetime = datetime.fromisoformat(data['return']['departureDateTime'])
+            travel_plan.transportation.return_arrival_location = data['return']['arrivalLocation']
+            travel_plan.transportation.return_arrival_datetime = datetime.fromisoformat(data['return']['arrivalDateTime'])
+            travel_plan.transportation.return_booking_reference = data['return']['bookingReference']
+            travel_plan.transportation.return_seat_info = data['return'].get('seatInfo', '')
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Transportation updated successfully',
+            'travel_plan': travel_plan.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to update transportation: {str(e)}'
+        }), 500
 
 @buyer.route('/travel-plans/<int:plan_id>/accommodation', methods=['PUT'])
 @buyer_required

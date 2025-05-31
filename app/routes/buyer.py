@@ -885,50 +885,71 @@ def update_meeting(meeting_id):
 @buyer_required
 def get_sellers():
     """
-    Endpoint to get list of sellers
+    Endpoint to get list of sellers with proper profile data including state and country
     """
+    from ..models.models import SellerProfile
+    
     # Get query parameters for filtering
     search = request.args.get('search', '')
     specialty = request.args.get('specialty', '')
     
-    # Build query
-    query = User.query.filter_by(role=UserRole.SELLER)
+    # Build query to join users with seller_profiles
+    query = db.session.query(User, SellerProfile).join(
+        SellerProfile, User.id == SellerProfile.user_id
+    ).filter(User.role == UserRole.SELLER.value)
     
-    # Apply filters if provided
+    # Apply search filter if provided
     if search:
         query = query.filter(
             (User.username.ilike(f'%{search}%')) | 
-            (User.business_name.ilike(f'%{search}%'))
+            (User.business_name.ilike(f'%{search}%')) |
+            (SellerProfile.business_name.ilike(f'%{search}%'))
         )
     
     # Execute query
-    sellers = query.all()
+    results = query.all()
     
     # Convert to response format
     seller_list = []
-    for seller in sellers:
-        # In a real application, you would fetch additional data like ratings, specialties, etc.
+    for user, profile in results:
         seller_data = {
-            'id': seller.id,
-            'name': seller.username,
-            'businessName': seller.business_name or '',
-            'description': seller.business_description or '',
-            'rating': 4.8,  # Placeholder
-            'specialties': ['Wildlife Tours', 'Camping', 'Nature Photography'],  # Placeholder
-            'image_url': '/images/sellers/default.jpg',  # Placeholder
-            'isVerified': seller.is_verified,
-            'stallNo': f"A{seller.id:02d}"  # Placeholder
+            'id': user.id,
+            'name': user.username,
+            'businessName': profile.business_name or user.business_name or '',
+            'description': profile.description or user.business_description or '',
+            'location': profile.state or 'Unknown',  # Display state instead of pincode
+            'country': profile.country or 'Unknown',
+            'address': profile.address or '',
+            'pincode': profile.pincode or '',
+            'seller_type': profile.seller_type or 'Not Specified',  # Include seller type
+            'rating': 4.8,  # Placeholder - could be calculated from reviews
+            'specialties': [interest.name for interest in profile.target_market_relationships],  # Dynamic specialties from database
+            'image_url': profile.logo_url or '/images/sellers/default.jpg',
+            'isVerified': profile.is_verified,
+            'stallNo': f"A{user.id:02d}",  # Placeholder
+            'website': profile.website or '',
+            'contactEmail': profile.contact_email or user.email,
+            'contactPhone': profile.contact_phone or ''
         }
         
-        # Filter by specialty if provided
+        # Filter by specialty if provided (placeholder logic)
         if specialty and specialty not in seller_data['specialties']:
             continue
         
         # Check meeting status
         user_id = get_jwt_identity()
-        meeting = Meeting.query.filter_by(buyer_id=user_id, seller_id=seller.id).order_by(Meeting.created_at.desc()).first()
-        if meeting:
-            seller_data['meetingStatus'] = meeting.status.value
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                user_id = None
+        
+        if user_id:
+            meeting = Meeting.query.filter_by(buyer_id=user_id, seller_id=user.id).order_by(Meeting.created_at.desc()).first()
+            if meeting:
+                seller_data['meetingStatus'] = meeting.status.value
+            else:
+                seller_data['meetingStatus'] = 'none'
         else:
             seller_data['meetingStatus'] = 'none'
         

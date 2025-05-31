@@ -248,6 +248,10 @@ class SellerProfile(db.Model):
     gst = db.Column(db.String(20), nullable=True)
     pincode = db.Column(db.String(10), nullable=True)
     
+    # Location fields (parsed from address)
+    state = db.Column(db.String(50), nullable=True)
+    country = db.Column(db.String(50), nullable=True)
+    
     # Existing fields
     logo_url = db.Column(db.String(255), nullable=True)
     website = db.Column(db.String(255), nullable=True)
@@ -277,6 +281,8 @@ class SellerProfile(db.Model):
             'assn_member': self.assn_member,
             'gst': self.gst,
             'pincode': self.pincode,
+            'state': self.state,
+            'country': self.country,
             'logo_url': self.logo_url,
             'website': self.website,
             'contact_email': self.contact_email,

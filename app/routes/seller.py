@@ -14,21 +14,25 @@ def get_sellers():
     seller_type = request.args.get('seller_type', '')
     target_market = request.args.get('target_market', '')
     
-    # Start with a query for all sellers
-    query = SellerProfile.query.join(User).filter(User.role == 'seller')
+    # Get all seller profiles and filter by user role in Python to avoid JOIN issues
+    all_profiles = SellerProfile.query.all()
+    
+    # Filter profiles where the associated user has role='seller'
+    seller_profiles = []
+    for profile in all_profiles:
+        user = User.query.get(profile.user_id)
+        if user and user.role == 'seller':
+            seller_profiles.append(profile)
     
     # Apply filters if provided
     if name:
-        query = query.filter(SellerProfile.business_name.ilike(f'%{name}%'))
+        seller_profiles = [s for s in seller_profiles if name.lower() in s.business_name.lower()]
     
     if seller_type:
-        query = query.filter(SellerProfile.seller_type == seller_type)
+        seller_profiles = [s for s in seller_profiles if s.seller_type == seller_type]
     
     if target_market:
-        query = query.filter(SellerProfile.target_market == target_market)
-    
-    # Execute the query
-    seller_profiles = query.all()
+        seller_profiles = [s for s in seller_profiles if s.target_market == target_market]
     
     return jsonify({
         'sellers': [s.to_dict() for s in seller_profiles]

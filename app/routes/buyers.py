@@ -19,7 +19,7 @@ def get_buyers():
     selling_wayanad = request.args.get('selling_wayanad', '')
     
     # Start with a query for all buyers
-    query = BuyerProfile.query.join(User).filter(User.role == UserRole.BUYER)
+    query = BuyerProfile.query.join(User).filter(User.role == 'buyer')
     
     # Apply filters if provided
     if name:
@@ -32,11 +32,12 @@ def get_buyers():
         query = query.filter(BuyerProfile.operator_type == operator_type)
     
     if interest:
-        # For JSON array fields, use contains
-        query = query.filter(BuyerProfile.interests.contains([interest]))
+        # For JSONB array fields, use the @> operator to check if array contains element
+        query = query.filter(BuyerProfile.interests.op('@>')(f'["{interest}"]'))
     
     if property_type:
-        query = query.filter(BuyerProfile.properties_of_interest.contains([property_type]))
+        # For JSONB array fields, use the @> operator to check if array contains element
+        query = query.filter(BuyerProfile.properties_of_interest.op('@>')(f'["{property_type}"]'))
     
     if country:
         query = query.filter(BuyerProfile.country == country)
@@ -51,8 +52,52 @@ def get_buyers():
     # Execute the query
     buyer_profiles = query.all()
     
+    # Convert to dict format without problematic relationships
+    buyers_data = []
+    for b in buyer_profiles:
+        buyer_dict = {
+            'id': b.id,
+            'user_id': b.user_id,
+            'name': b.name,
+            'organization': b.organization,
+            'designation': b.designation,
+            'operator_type': b.operator_type,
+            'category_id': b.category_id,
+            'salutation': b.salutation,
+            'first_name': b.first_name,
+            'last_name': b.last_name,
+            'vip': b.vip,
+            'status': b.status,
+            'gst': b.gst,
+            'pincode': b.pincode,
+            'interests': b.interests or [],
+            'properties_of_interest': b.properties_of_interest or [],
+            'country': b.country,
+            'state': b.state,
+            'city': b.city,
+            'address': b.address,
+            'mobile': b.mobile,
+            'website': b.website,
+            'instagram': b.instagram,
+            'year_of_starting_business': b.year_of_starting_business,
+            'selling_wayanad': b.selling_wayanad,
+            'since_when': b.since_when,
+            'bio': b.bio,
+            'profile_image': b.profile_image,
+            'created_at': b.created_at.isoformat() if b.created_at else None,
+            'updated_at': b.updated_at.isoformat() if b.updated_at else None,
+            'user': {
+                'id': b.user.id,
+                'username': b.user.username,
+                'email': b.user.email,
+                'role': b.user.role,
+                'created_at': b.user.created_at.isoformat() if b.user.created_at else None
+            }
+        }
+        buyers_data.append(buyer_dict)
+    
     return jsonify({
-        'buyers': [b.to_dict() for b in buyer_profiles]
+        'buyers': buyers_data
     }), 200
 
 @buyers.route('/<int:buyer_id>', methods=['GET'])
@@ -69,13 +114,54 @@ def get_buyer(buyer_id):
     
     # Check if the associated user is actually a buyer
     user = User.query.get(buyer_id)
-    if not user or user.role != UserRole.BUYER:
+    if not user or user.role != 'buyer':
         return jsonify({
             'error': 'User is not a buyer'
         }), 400
     
+    # Convert to dict format without problematic relationships
+    buyer_dict = {
+        'id': buyer_profile.id,
+        'user_id': buyer_profile.user_id,
+        'name': buyer_profile.name,
+        'organization': buyer_profile.organization,
+        'designation': buyer_profile.designation,
+        'operator_type': buyer_profile.operator_type,
+        'category_id': buyer_profile.category_id,
+        'salutation': buyer_profile.salutation,
+        'first_name': buyer_profile.first_name,
+        'last_name': buyer_profile.last_name,
+        'vip': buyer_profile.vip,
+        'status': buyer_profile.status,
+        'gst': buyer_profile.gst,
+        'pincode': buyer_profile.pincode,
+        'interests': buyer_profile.interests or [],
+        'properties_of_interest': buyer_profile.properties_of_interest or [],
+        'country': buyer_profile.country,
+        'state': buyer_profile.state,
+        'city': buyer_profile.city,
+        'address': buyer_profile.address,
+        'mobile': buyer_profile.mobile,
+        'website': buyer_profile.website,
+        'instagram': buyer_profile.instagram,
+        'year_of_starting_business': buyer_profile.year_of_starting_business,
+        'selling_wayanad': buyer_profile.selling_wayanad,
+        'since_when': buyer_profile.since_when,
+        'bio': buyer_profile.bio,
+        'profile_image': buyer_profile.profile_image,
+        'created_at': buyer_profile.created_at.isoformat() if buyer_profile.created_at else None,
+        'updated_at': buyer_profile.updated_at.isoformat() if buyer_profile.updated_at else None,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'created_at': user.created_at.isoformat() if user.created_at else None
+        }
+    }
+    
     return jsonify({
-        'buyer': buyer_profile.to_dict()
+        'buyer': buyer_dict
     }), 200
 
 @buyers.route('/operator-types', methods=['GET'])

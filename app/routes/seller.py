@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models import db, User, UserRole, SellerProfile
+from ..models import db, User, UserRole, SellerProfile, SellerAttendee, SellerBusinessInfo, SellerFinancialInfo, SellerReferences, PropertyType, Interest
 from ..utils.auth import seller_required, admin_required
 
 seller = Blueprint('seller', __name__, url_prefix='/api/sellers')
@@ -67,6 +67,12 @@ def get_seller(seller_id):
 def get_own_profile():
     """Get the current seller's profile"""
     user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
     
     # Find the seller profile
     seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
@@ -86,6 +92,13 @@ def get_own_profile():
 def update_profile():
     """Update the current seller's profile"""
     user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
     data = request.get_json()
     
     # Validate business name if provided
@@ -180,3 +193,58 @@ def verify_seller(seller_id):
         'message': 'Seller verified successfully',
         'seller': seller_profile.to_dict()
     }), 200
+
+# Enhanced Endpoints for New Models
+
+@seller.route('/attendees', methods=['GET'])
+@jwt_required()
+@seller_required
+def get_attendees():
+    """Get all attendees for the current seller"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Get attendees
+    attendees = SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id).all()
+    
+    return jsonify({
+        'attendees': [attendee.to_dict() for attendee in attendees]
+    }), 200
+
+@seller.route('/property-types', methods=['GET'])
+@jwt_required()
+def get_property_types():
+    """Get all property types"""
+    try:
+        property_types = PropertyType.query.all()
+        return jsonify({
+            'property_types': [pt.to_dict() for pt in property_types]
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch property types: {str(e)}'
+        }), 500
+
+@seller.route('/interests', methods=['GET'])
+@jwt_required()
+def get_interests():
+    """Get all interests"""
+    try:
+        interests = Interest.query.all()
+        return jsonify({
+            'interests': [interest.to_dict() for interest in interests]
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch interests: {str(e)}'
+        }), 500

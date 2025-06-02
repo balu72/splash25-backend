@@ -40,18 +40,26 @@ class BuyerCategory(db.Model):
     __tablename__ = 'buyer_categories'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    deposit_amount = db.Column(db.Numeric(10, 2), default=0.00)
-    entry_fee = db.Column(db.Numeric(10, 2), default=0.00)
-    description = db.Column(db.Text, nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    deposit_amount = db.Column(db.Numeric(10, 2))
+    entry_fee = db.Column(db.Numeric(10, 2))
+    accommodation_hosted = db.Column(db.Boolean, default=False)
+    transfers_hosted = db.Column(db.Boolean, default=False)
+    max_meetings = db.Column(db.Integer)
+    min_meetings = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
-            'deposit_amount': float(self.deposit_amount),
-            'entry_fee': float(self.entry_fee),
-            'description': self.description
+            'deposit_amount': float(self.deposit_amount) if self.deposit_amount else None,
+            'entry_fee': float(self.entry_fee) if self.entry_fee else None,
+            'accommodation_hosted': self.accommodation_hosted,
+            'transfers_hosted': self.transfers_hosted,
+            'max_meetings': self.max_meetings,
+            'min_meetings': self.min_meetings,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
 class PropertyType(db.Model):
@@ -86,26 +94,28 @@ class StallType(db.Model):
     __tablename__ = 'stall_types'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    price = db.Column(db.Numeric(10, 2), nullable=False)
-    size = db.Column(db.String(50), nullable=True)
-    allowed_attendees = db.Column(db.Integer, default=2)
-    max_meetings_per_attendee = db.Column(db.Integer, default=20)
-    min_meetings_per_attendee = db.Column(db.Integer, default=5)
-    inclusions = db.Column(db.Text, nullable=True)
+    name = db.Column(db.String(50), nullable=False)
+    price = db.Column(db.Numeric(10, 2))
+    attendees = db.Column(db.Integer)  # Changed from allowed_attendees to match schema
+    max_meetings_per_attendee = db.Column(db.Integer)
+    min_meetings_per_attendee = db.Column(db.Integer)
+    size = db.Column(db.String(50))
     saleable = db.Column(db.Boolean, default=True)
+    inclusions = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
-            'price': float(self.price),
+            'price': float(self.price) if self.price else None,
             'size': self.size,
-            'allowed_attendees': self.allowed_attendees,
+            'attendees': self.attendees,  # Updated field name
             'max_meetings_per_attendee': self.max_meetings_per_attendee,
             'min_meetings_per_attendee': self.min_meetings_per_attendee,
             'inclusions': self.inclusions,
-            'saleable': self.saleable
+            'saleable': self.saleable,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
 class User(db.Model):
@@ -157,12 +167,34 @@ class BuyerProfile(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Core Information (matching database exactly)
     name = db.Column(db.String(100), nullable=False)
     organization = db.Column(db.String(100), nullable=False)
     designation = db.Column(db.String(50), nullable=True)
     operator_type = db.Column(db.String(50), nullable=True)
     
-    # Enhanced fields
+    # Profile Information
+    interests = db.Column(db.JSON, nullable=True)  # Note: DB uses JSONB
+    properties_of_interest = db.Column(db.JSON, nullable=True)  # Note: DB uses JSONB
+    
+    # Address Information
+    country = db.Column(db.String(50), nullable=True)
+    state = db.Column(db.String(50), nullable=True)
+    city = db.Column(db.String(50), nullable=True)
+    address = db.Column(db.Text, nullable=True)
+    mobile = db.Column(db.String(20), nullable=True)
+    website = db.Column(db.String(255), nullable=True)
+    instagram = db.Column(db.String(100), nullable=True)
+    
+    # Business Information
+    year_of_starting_business = db.Column(db.Integer, nullable=True)
+    selling_wayanad = db.Column(db.Boolean, default=False)
+    since_when = db.Column(db.Integer, nullable=True)
+    bio = db.Column(db.Text, nullable=True)
+    profile_image = db.Column(db.String(255), nullable=True)
+    
+    # Category and Status
     category_id = db.Column(db.Integer, db.ForeignKey('buyer_categories.id'), nullable=True)
     salutation = db.Column(db.String(10), nullable=True)
     first_name = db.Column(db.String(50), nullable=True)
@@ -172,21 +204,7 @@ class BuyerProfile(db.Model):
     gst = db.Column(db.String(20), nullable=True)
     pincode = db.Column(db.String(10), nullable=True)
     
-    # Existing fields for backward compatibility
-    interests = db.Column(db.JSON, nullable=True)
-    properties_of_interest = db.Column(db.JSON, nullable=True)
-    country = db.Column(db.String(50), nullable=True)
-    state = db.Column(db.String(50), nullable=True)
-    city = db.Column(db.String(50), nullable=True)
-    address = db.Column(db.Text, nullable=True)
-    mobile = db.Column(db.String(20), nullable=True)
-    website = db.Column(db.String(255), nullable=True)
-    instagram = db.Column(db.String(100), nullable=True)
-    year_of_starting_business = db.Column(db.Integer, nullable=True)
-    selling_wayanad = db.Column(db.Boolean, default=False)
-    since_when = db.Column(db.Integer, nullable=True)
-    bio = db.Column(db.Text, nullable=True)
-    profile_image = db.Column(db.String(255), nullable=True)
+    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
@@ -241,24 +259,27 @@ class SellerProfile(db.Model):
     seller_type = db.Column(db.String(50), nullable=True)
     target_market = db.Column(db.String(50), nullable=True)
     
-    # Enhanced fields
+    # Contact Information
+    contact_email = db.Column(db.String(100), nullable=True)
+    contact_phone = db.Column(db.String(20), nullable=True)
+    
+    # Address Information
+    address = db.Column(db.Text, nullable=True)
+    state = db.Column(db.String(100), nullable=True)  # Note: DB has VARCHAR(100)
+    pincode = db.Column(db.String(10), nullable=True)
+    country = db.Column(db.String(50), nullable=True)
+    
+    # Online Presence
+    logo_url = db.Column(db.String(255), nullable=True)
+    website = db.Column(db.String(255), nullable=True)
+    instagram = db.Column(db.String(100), nullable=True)
+    
+    # Business Status
     property_type_id = db.Column(db.Integer, db.ForeignKey('property_types.id'), nullable=True)
     status = db.Column(db.String(20), default='active')
     assn_member = db.Column(db.Boolean, default=False)
-    gst = db.Column(db.String(20), nullable=True)
-    pincode = db.Column(db.String(10), nullable=True)
-    
-    # Location fields (parsed from address)
-    state = db.Column(db.String(50), nullable=True)
-    country = db.Column(db.String(50), nullable=True)
-    
-    # Existing fields
-    logo_url = db.Column(db.String(255), nullable=True)
-    website = db.Column(db.String(255), nullable=True)
-    contact_email = db.Column(db.String(100), nullable=True)
-    contact_phone = db.Column(db.String(20), nullable=True)
-    address = db.Column(db.Text, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
+    gst = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
@@ -336,7 +357,7 @@ class Stall(db.Model):
             'stall_type_info': self.stall_type_rel.to_dict() if self.stall_type_rel else None,
             'price': self.price or (float(self.stall_type_rel.price) if self.stall_type_rel else None),
             'size': self.size or (self.stall_type_rel.size if self.stall_type_rel else None),
-            'allowed_attendees': self.allowed_attendees or (self.stall_type_rel.allowed_attendees if self.stall_type_rel else None),
+            'allowed_attendees': self.allowed_attendees or (self.stall_type_rel.attendees if self.stall_type_rel else None),
             'max_meetings_per_attendee': self.max_meetings_per_attendee or (self.stall_type_rel.max_meetings_per_attendee if self.stall_type_rel else None),
             'min_meetings_per_attendee': self.min_meetings_per_attendee or (self.stall_type_rel.min_meetings_per_attendee if self.stall_type_rel else None),
             'inclusions': self.inclusions or (self.stall_type_rel.inclusions if self.stall_type_rel else None),
@@ -354,14 +375,18 @@ class Meeting(db.Model):
     buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     time_slot_id = db.Column(db.Integer, db.ForeignKey('time_slots.id'), nullable=True)
+    attendee_id = db.Column(db.Integer, db.ForeignKey('seller_attendees.id'), nullable=True)  # Added missing field
     notes = db.Column(db.Text, nullable=True)
     status = db.Column(db.Enum(MeetingStatus), nullable=False, default=MeetingStatus.PENDING)
+    meeting_date = db.Column(db.Date, nullable=True)  # Added missing field
+    meeting_time = db.Column(db.Time, nullable=True)  # Added missing field
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
     buyer = db.relationship('User', foreign_keys=[buyer_id], backref=db.backref('buyer_meetings', lazy=True))
     seller = db.relationship('User', foreign_keys=[seller_id], backref=db.backref('seller_meetings', lazy=True))
     time_slot = db.relationship('TimeSlot', foreign_keys=[time_slot_id], backref=db.backref('meeting', uselist=False))
+    attendee = db.relationship('SellerAttendee', foreign_keys=[attendee_id], backref=db.backref('meetings', lazy=True))  # Added relationship
     
     def to_dict(self):
         return {
@@ -369,14 +394,18 @@ class Meeting(db.Model):
             'buyer_id': self.buyer_id,
             'seller_id': self.seller_id,
             'time_slot_id': self.time_slot_id,
+            'attendee_id': self.attendee_id,
             'notes': self.notes,
             'status': self.status.value,
+            'meeting_date': self.meeting_date.isoformat() if self.meeting_date else None,
+            'meeting_time': self.meeting_time.isoformat() if self.meeting_time else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'buyer': {
                 'id': self.buyer.id,
                 'username': self.buyer.username,
-                'email': self.buyer.email
+                'email': self.buyer.email,
+                'organization': self.buyer.buyer_profile.organization if self.buyer.buyer_profile else 'Unknown Organization'
             },
             'seller': {
                 'id': self.seller.id,
@@ -384,6 +413,7 @@ class Meeting(db.Model):
                 'email': self.seller.email,
                 'business_name': self.seller.seller_profile.business_name if self.seller.seller_profile else self.seller.business_name
             },
+            'attendee': self.attendee.to_dict() if self.attendee else None,
             'time_slot': self.time_slot.to_dict() if self.time_slot else None
         }
 
@@ -589,7 +619,7 @@ class Listing(db.Model):
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    price = db.Column(db.Float, nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False)  # Changed to Numeric for consistency
     duration = db.Column(db.String(50), nullable=False)
     location = db.Column(db.String(200), nullable=False)
     max_participants = db.Column(db.Integer, nullable=False)
@@ -601,6 +631,24 @@ class Listing(db.Model):
     
     seller = db.relationship('User', backref=db.backref('listings', lazy=True))
     available_dates = db.relationship('ListingDate', backref='listing', lazy=True, cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_id': self.seller_id,
+            'name': self.name,
+            'description': self.description,
+            'price': float(self.price) if self.price else None,
+            'duration': self.duration,
+            'location': self.location,
+            'max_participants': self.max_participants,
+            'status': self.status.value,
+            'image_url': self.image_url,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'views': self.views,
+            'bookings': self.bookings,
+            'available_dates': [date.date.isoformat() for date in self.available_dates]
+        }
 
 class ListingDate(db.Model):
     __tablename__ = 'listing_dates'
@@ -643,3 +691,266 @@ class DomainRestriction(db.Model):
     domain = db.Column(db.String(100), unique=True, nullable=False)
     is_enabled = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# Missing Models from Clean Schema
+
+class SellerAttendee(db.Model):
+    __tablename__ = 'seller_attendees'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
+    attendee_number = db.Column(db.Integer)
+    name = db.Column(db.String(100))
+    designation = db.Column(db.String(100))
+    email = db.Column(db.String(100))
+    mobile = db.Column(db.String(15))
+    is_primary_contact = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('attendees', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_profile_id': self.seller_profile_id,
+            'attendee_number': self.attendee_number,
+            'name': self.name,
+            'designation': self.designation,
+            'email': self.email,
+            'mobile': self.mobile,
+            'is_primary_contact': self.is_primary_contact,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class BuyerBusinessInfo(db.Model):
+    __tablename__ = 'buyer_business_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_profile_id = db.Column(db.Integer, db.ForeignKey('buyer_profiles.id'))
+    start_year = db.Column(db.Integer)
+    property_interest_1 = db.Column(db.String(100))
+    property_interest_2 = db.Column(db.String(100))
+    sell_wayanad = db.Column(db.Boolean, default=False)
+    sell_wayanad_year = db.Column(db.Integer)
+    previous_visit = db.Column(db.Boolean, default=False)
+    previous_stay_property = db.Column(db.String(100))
+    why_visit = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    buyer_profile = db.relationship('BuyerProfile', backref=db.backref('business_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'buyer_profile_id': self.buyer_profile_id,
+            'start_year': self.start_year,
+            'property_interest_1': self.property_interest_1,
+            'property_interest_2': self.property_interest_2,
+            'sell_wayanad': self.sell_wayanad,
+            'sell_wayanad_year': self.sell_wayanad_year,
+            'previous_visit': self.previous_visit,
+            'previous_stay_property': self.previous_stay_property,
+            'why_visit': self.why_visit,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class BuyerFinancialInfo(db.Model):
+    __tablename__ = 'buyer_financial_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_profile_id = db.Column(db.Integer, db.ForeignKey('buyer_profiles.id'))
+    deposit_paid = db.Column(db.Boolean, default=False)
+    entry_fee_paid = db.Column(db.Boolean, default=False)
+    deposit_amount = db.Column(db.Numeric(10, 2))
+    entry_fee_amount = db.Column(db.Numeric(10, 2))
+    payment_date = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    buyer_profile = db.relationship('BuyerProfile', backref=db.backref('financial_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'buyer_profile_id': self.buyer_profile_id,
+            'deposit_paid': self.deposit_paid,
+            'entry_fee_paid': self.entry_fee_paid,
+            'deposit_amount': float(self.deposit_amount) if self.deposit_amount else None,
+            'entry_fee_amount': float(self.entry_fee_amount) if self.entry_fee_amount else None,
+            'payment_date': self.payment_date.isoformat() if self.payment_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class BuyerReferences(db.Model):
+    __tablename__ = 'buyer_references'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    buyer_profile_id = db.Column(db.Integer, db.ForeignKey('buyer_profiles.id'))
+    ref1_name = db.Column(db.String(100))
+    ref1_address = db.Column(db.Text)
+    ref2_name = db.Column(db.String(100))
+    ref2_address = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    buyer_profile = db.relationship('BuyerProfile', backref=db.backref('references', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'buyer_profile_id': self.buyer_profile_id,
+            'ref1_name': self.ref1_name,
+            'ref1_address': self.ref1_address,
+            'ref2_name': self.ref2_name,
+            'ref2_address': self.ref2_address,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class SellerBusinessInfo(db.Model):
+    __tablename__ = 'seller_business_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
+    start_year = db.Column(db.Integer)
+    number_of_rooms = db.Column(db.Integer)
+    previous_business = db.Column(db.Boolean, default=False)
+    previous_business_year = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('business_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_profile_id': self.seller_profile_id,
+            'start_year': self.start_year,
+            'number_of_rooms': self.number_of_rooms,
+            'previous_business': self.previous_business,
+            'previous_business_year': self.previous_business_year,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class SellerFinancialInfo(db.Model):
+    __tablename__ = 'seller_financial_info'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
+    deposit_paid = db.Column(db.Boolean, default=False)
+    total_amt_due = db.Column(db.Numeric(10, 2))
+    total_amt_paid = db.Column(db.Numeric(10, 2))
+    subscription_uptodate = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('financial_info', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_profile_id': self.seller_profile_id,
+            'deposit_paid': self.deposit_paid,
+            'total_amt_due': float(self.total_amt_due) if self.total_amt_due else None,
+            'total_amt_paid': float(self.total_amt_paid) if self.total_amt_paid else None,
+            'subscription_uptodate': self.subscription_uptodate,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class SellerReferences(db.Model):
+    __tablename__ = 'seller_references'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
+    ref1_name = db.Column(db.String(100))
+    ref1_address = db.Column(db.Text)
+    ref2_name = db.Column(db.String(100))
+    ref2_address = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('references', uselist=False))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'seller_profile_id': self.seller_profile_id,
+            'ref1_name': self.ref1_name,
+            'ref1_address': self.ref1_address,
+            'ref2_name': self.ref2_name,
+            'ref2_address': self.ref2_address,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class StallInventory(db.Model):
+    __tablename__ = 'stall_inventory'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    stall_number = db.Column(db.String(15), nullable=False)
+    stall_type_id = db.Column(db.Integer, db.ForeignKey('stall_types.id'))
+    is_allocated = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    stall_type = db.relationship('StallType', backref=db.backref('inventory', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'stall_number': self.stall_number,
+            'stall_type_id': self.stall_type_id,
+            'is_allocated': self.is_allocated,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'stall_type': self.stall_type.to_dict() if self.stall_type else None
+        }
+
+class MigrationLog(db.Model):
+    __tablename__ = 'migration_log'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    step_name = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), nullable=False)
+    message = db.Column(db.Text)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    duration_seconds = db.Column(db.Integer)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'step_name': self.step_name,
+            'status': self.status,
+            'message': self.message,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'duration_seconds': self.duration_seconds
+        }
+
+class MigrationMappingBuyers(db.Model):
+    __tablename__ = 'migration_mapping_buyers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    customer_buyer_id = db.Column(db.Integer)
+    splash25_user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    splash25_buyer_profile_id = db.Column(db.Integer, db.ForeignKey('buyer_profiles.id'))
+    migration_status = db.Column(db.String(20), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('buyer_migration_mappings', lazy=True))
+    buyer_profile = db.relationship('BuyerProfile', backref=db.backref('migration_mappings', lazy=True))
+
+class MigrationMappingSellers(db.Model):
+    __tablename__ = 'migration_mapping_sellers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    customer_seller_id = db.Column(db.Integer)
+    splash25_user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    splash25_seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
+    migration_status = db.Column(db.String(20), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('seller_migration_mappings', lazy=True))
+    seller_profile = db.relationship('SellerProfile', backref=db.backref('migration_mappings', lazy=True))

@@ -315,6 +315,7 @@ def update_outbound(plan_id):
     
     # Determine transportation type from data - preserve existing type if not provided
     transport_type = data.get('type', travel_plan.transportation.type if travel_plan.transportation else 'flight').lower()
+    outbound_type = data.get('outbound_type', transport_type).lower()  # Individual outbound type
     
     # Update outbound journey details
     if not travel_plan.transportation:
@@ -322,6 +323,7 @@ def update_outbound(plan_id):
         transportation = Transportation(
             travel_plan_id=plan_id,
             type=transport_type,
+            outbound_type=outbound_type,  # Set individual outbound type
             outbound_carrier=data['carrier'],
             outbound_number=data['number'],
             outbound_departure_location=data['departureLocation'],
@@ -343,6 +345,7 @@ def update_outbound(plan_id):
     else:
         # Update existing transportation record
         travel_plan.transportation.type = transport_type
+        travel_plan.transportation.outbound_type = outbound_type  # Update individual outbound type
         travel_plan.transportation.outbound_carrier = data['carrier']
         travel_plan.transportation.outbound_number = data['number']
         travel_plan.transportation.outbound_departure_location = data['departureLocation']

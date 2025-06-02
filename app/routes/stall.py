@@ -11,6 +11,12 @@ stall = Blueprint('stall', __name__, url_prefix='/api/stalls')
 def get_stalls():
     """Get all stalls for the current seller"""
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
     
     try:
         # Get stalls for the current seller with seller profile info
@@ -40,12 +46,18 @@ def get_stalls():
 def create_stall():
     """Create a new stall for the current seller"""
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
     
     try:
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['number', 'stall_type', 'price', 'size', 'allowed_attendees', 
+        required_fields = ['number', 'stall_type', 'price', 'size', 'attendees', 
                           'max_meetings_per_attendee', 'min_meetings_per_attendee']
         
         for field in required_fields:
@@ -68,11 +80,12 @@ def create_stall():
         # Create new stall
         new_stall = Stall(
             seller_id=current_user_id,
+            stall_type_id=1,  # Default stall type ID, can be updated later
             number=data['number'],
             stall_type=data['stall_type'],
             price=float(data['price']),
             size=data['size'],
-            allowed_attendees=int(data['allowed_attendees']),
+            allowed_attendees=int(data['attendees']),  # Map to legacy field for backward compatibility
             max_meetings_per_attendee=int(data['max_meetings_per_attendee']),
             min_meetings_per_attendee=int(data['min_meetings_per_attendee']),
             inclusions=data.get('inclusions', '')
@@ -116,6 +129,12 @@ def create_stall():
 def update_stall(stall_id):
     """Update an existing stall"""
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
     
     try:
         # Find the stall and verify ownership
@@ -152,8 +171,8 @@ def update_stall(stall_id):
         if 'size' in data:
             stall.size = data['size']
         
-        if 'allowed_attendees' in data:
-            stall.allowed_attendees = int(data['allowed_attendees'])
+        if 'attendees' in data:
+            stall.allowed_attendees = int(data['attendees'])  # Map to legacy field for backward compatibility
         
         if 'max_meetings_per_attendee' in data:
             stall.max_meetings_per_attendee = int(data['max_meetings_per_attendee'])
@@ -201,6 +220,12 @@ def update_stall(stall_id):
 def delete_stall(stall_id):
     """Delete a stall"""
     current_user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(current_user_id, str):
+        try:
+            current_user_id = int(current_user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
     
     try:
         # Find the stall and verify ownership

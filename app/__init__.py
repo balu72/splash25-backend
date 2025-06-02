@@ -35,7 +35,7 @@ def create_app():
             app.logger.debug('Body: %s', request.get_data())
     
     CORS(app)
-    CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:80","http://localhost:8080", "http://dechivo.com", "https://dechivo.com", "http://splash25-frontend:8080", "http://frontend:8080"]}})
+    CORS(app, resources={r"/api/*": {"origins": ["http://localhost", "http://localhost:3000", "http://localhost:80","http://localhost:8080", "http://dechivo.com", "https://dechivo.com", "http://splash25-frontend:8080", "http://frontend:8080"]}})
 
     # Configure SQLAlchemy
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://splash25user:splash25password@localhost:5432/splash25_core_db')
@@ -62,6 +62,7 @@ def create_app():
     from .routes import main, auth, buyer, seller, admin, system, timeslot, meeting, buyers
     from .routes.health import health_bp
     from .routes.stall import stall
+    from .routes.stall_types import stall_types
     
     app.register_blueprint(main)
     app.register_blueprint(auth)
@@ -73,6 +74,7 @@ def create_app():
     app.register_blueprint(meeting)
     app.register_blueprint(buyers)
     app.register_blueprint(stall)
+    app.register_blueprint(stall_types)
     app.register_blueprint(health_bp, url_prefix='/api')
     
     # Create database tables (only if database is available)

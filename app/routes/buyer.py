@@ -12,44 +12,92 @@ def dashboard():
     """
     Endpoint for buyer dashboard data
     """
-    # This is a placeholder for actual dashboard data
-    # In a real application, you would fetch relevant data for the buyer
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get featured destinations from verified sellers
+    try:
+        from ..models.models import SellerProfile
+        featured_sellers = SellerProfile.query.join(User).filter(
+            User.role == UserRole.SELLER.value,
+            SellerProfile.is_verified == True,
+            SellerProfile.status == 'active'
+        ).limit(3).all()
+        
+        featured_destinations = []
+        for seller in featured_sellers:
+            featured_destinations.append({
+                'id': seller.id,
+                'name': seller.business_name or 'Kerala Experience',
+                'description': seller.description or 'Experience authentic Kerala hospitality',
+                'image_url': seller.logo_url or '/images/destinations/default.jpg'
+            })
+        
+        # Fallback if no sellers found
+        if not featured_destinations:
+            featured_destinations = [
+                {
+                    'id': 1,
+                    'name': 'Discover Kerala',
+                    'description': 'Connect with local businesses and experiences',
+                    'image_url': '/images/destinations/kerala-default.jpg'
+                }
+            ]
+    except Exception as e:
+        # Fallback in case of database error
+        featured_destinations = []
+    
+    # Get upcoming events from buyer's meetings
+    try:
+        upcoming_meetings = Meeting.query.filter_by(
+            buyer_id=user_id,
+            status=MeetingStatus.ACCEPTED
+        ).join(TimeSlot).filter(
+            TimeSlot.start_time > datetime.now()
+        ).order_by(TimeSlot.start_time).limit(2).all()
+        
+        upcoming_events = []
+        for meeting in upcoming_meetings:
+            seller_name = 'Business Partner'
+            if meeting.seller and meeting.seller.seller_profile:
+                seller_name = meeting.seller.seller_profile.business_name
+            elif meeting.seller:
+                seller_name = meeting.seller.business_name or meeting.seller.username
+            
+            upcoming_events.append({
+                'id': meeting.id,
+                'name': f'Meeting with {seller_name}',
+                'date': meeting.time_slot.start_time.strftime('%Y-%m-%d'),
+                'location': 'Event Venue'
+            })
+        
+        # If no upcoming meetings, show general event info
+        if not upcoming_events:
+            # Check system settings for event info
+            event_start = SystemSetting.query.filter_by(key='event_start_date').first()
+            venue_name = SystemSetting.query.filter_by(key='venue_name').first()
+            
+            if event_start and venue_name:
+                upcoming_events.append({
+                    'id': 1,
+                    'name': 'Splash25 Event',
+                    'date': event_start.value,
+                    'location': venue_name.value
+                })
+    except Exception as e:
+        # Fallback in case of database error
+        upcoming_events = []
+    
     return jsonify({
         'message': 'Welcome to the Buyer Dashboard',
-        'featured_destinations': [
-            {
-                'id': 1,
-                'name': 'Wayanad Wildlife Sanctuary',
-                'description': 'Experience the rich biodiversity of Wayanad',
-                'image_url': '/images/destinations/wayanad-wildlife.jpg'
-            },
-            {
-                'id': 2,
-                'name': 'Chembra Peak',
-                'description': 'Trek to the heart-shaped lake at the summit',
-                'image_url': '/images/destinations/chembra-peak.jpg'
-            },
-            {
-                'id': 3,
-                'name': 'Edakkal Caves',
-                'description': 'Explore ancient petroglyphs dating back to 6000 BCE',
-                'image_url': '/images/destinations/edakkal-caves.jpg'
-            }
-        ],
-        'upcoming_events': [
-            {
-                'id': 1,
-                'name': 'Wayanad Nature Camp',
-                'date': '2025-06-15',
-                'location': 'Muthanga Wildlife Sanctuary'
-            },
-            {
-                'id': 2,
-                'name': 'Splash25 Trekking Adventure',
-                'date': '2025-07-10',
-                'location': 'Chembra Peak'
-            }
-        ]
+        'featured_destinations': featured_destinations,
+        'upcoming_events': upcoming_events
     }), 200
 
 @buyer.route('/profile', methods=['GET'])

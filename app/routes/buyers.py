@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from ..utils.auth import seller_required, admin_required
-from ..models import db, User, UserRole, BuyerProfile
+from ..models import db, User, UserRole, BuyerProfile, Interest, PropertyType
 
 buyers = Blueprint('buyers', __name__, url_prefix='/api/buyers')
 
@@ -185,21 +185,17 @@ def get_operator_types():
 @buyers.route('/interests', methods=['GET'])
 @jwt_required()
 def get_interests():
-    """Get all unique interests"""
+    """Read all  interests"""
     # Get all buyer profiles and extract unique interests
-    buyer_profiles = BuyerProfile.query.all()
-    interests = set()
+    all_interests = Interest.query.all()
+    interests = []
     
-    for profile in buyer_profiles:
-        if profile.interests:
-            interests.update(profile.interests)
-    
-    # If no data exists, return default interests
-    if not interests:
-        interests = {'Wildlife', 'Trekking', 'Photography', 'Nature', 'Cultural Tours', 'Adventure Sports', 'Wellness', 'Backpacking'}
-    
+    for interest in all_interests:
+        if (interest.name):
+            interests.append(interest.name)
+
     return jsonify({
-        'interests': list(interests)
+        'interests': interests
     }), 200
 
 @buyers.route('/property-types', methods=['GET'])
@@ -207,19 +203,15 @@ def get_interests():
 def get_property_types():
     """Get all unique property types"""
     # Get all buyer profiles and extract unique property types
-    buyer_profiles = BuyerProfile.query.all()
-    property_types = set()
+    all_property_types = PropertyType.query.all()
+    property_types = []
     
-    for profile in buyer_profiles:
-        if profile.properties_of_interest:
-            property_types.update(profile.properties_of_interest)
-    
-    # If no data exists, return default property types
-    if not property_types:
-        property_types = {'Resorts', 'Hotels', 'Homestays', 'Camping', 'Tree Houses', 'Villas', 'Hostels'}
+    for property_type in all_property_types:
+        if (property_type.name):
+            property_types.append(property_type.name)
     
     return jsonify({
-        'property_types': list(property_types)
+        'property_types': property_types
     }), 200
 
 @buyers.route('/countries', methods=['GET'])

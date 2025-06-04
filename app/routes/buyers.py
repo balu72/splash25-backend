@@ -53,6 +53,7 @@ def get_buyers():
     buyer_profiles = query.all()
     
     # Convert to dict format without problematic relationships
+    """
     buyers_data = []
     for b in buyer_profiles:
         buyer_dict = {
@@ -70,7 +71,7 @@ def get_buyers():
             'status': b.status,
             'gst': b.gst,
             'pincode': b.pincode,
-            'interests': b.interests or [],
+            'interests': [interest.name for interest in b.interest_relationships] if b.interest_relationships else [],
             'properties_of_interest': b.properties_of_interest or [],
             'country': b.country,
             'state': b.state,
@@ -95,9 +96,11 @@ def get_buyers():
             }
         }
         buyers_data.append(buyer_dict)
+    """
     
     return jsonify({
-        'buyers': buyers_data
+       # 'buyers': buyers_data
+       'buyers': [buyer_profile.to_dict() for buyer_profile in buyer_profiles]
     }), 200
 
 @buyers.route('/<int:buyer_id>', methods=['GET'])
@@ -135,7 +138,7 @@ def get_buyer(buyer_id):
         'status': buyer_profile.status,
         'gst': buyer_profile.gst,
         'pincode': buyer_profile.pincode,
-        'interests': buyer_profile.interests or [],
+        'interests': [interest.name for interest in buyer_profile.interest_relationships] if buyer_profile.interest_relationships else [],
         'properties_of_interest': buyer_profile.properties_of_interest or [],
         'country': buyer_profile.country,
         'state': buyer_profile.state,

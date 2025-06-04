@@ -53,7 +53,7 @@ def get_buyers():
     buyer_profiles = query.all()
     
     # Convert to dict format without problematic relationships
-    """
+
     buyers_data = []
     for b in buyer_profiles:
         buyer_dict = {
@@ -96,11 +96,10 @@ def get_buyers():
             }
         }
         buyers_data.append(buyer_dict)
-    """
+ 
     
     return jsonify({
-       # 'buyers': buyers_data
-       'buyers': [buyer_profile.to_dict() for buyer_profile in buyer_profiles]
+       'buyers': buyers_data
     }), 200
 
 @buyers.route('/<int:buyer_id>', methods=['GET'])

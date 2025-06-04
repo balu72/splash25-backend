@@ -241,9 +241,10 @@ def get_states():
             'error': 'Country parameter is required'
         }), 400
     
-    states = db.session.query(BuyerProfile.state).filter_by(country=country).distinct().all()
+   # states = db.session.query(BuyerProfile.state).filter_by(country=country).distinct().all()
     # Filter out None values and extract from tuples
-    state_list = [s[0] for s in states if s[0]]
+  #  state_list = [s[0] for s in states if s[0]]
+    state_list =[]
     
     # If no data exists, return default states based on country
     if not state_list:

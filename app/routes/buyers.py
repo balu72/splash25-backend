@@ -247,8 +247,15 @@ def get_states():
     
     # If no data exists, return default states based on country
     if not state_list:
-        mock_states = {
-            'India': ['Kerala', 'Karnataka', 'Tamil Nadu', 'Goa', 'Maharashtra'],
+        static_data_states = {
+            'India': [
+                'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+                'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+                'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+                'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim',
+                'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand',
+                'West Bengal'
+            ],
             'USA': ['California', 'New York', 'Florida', 'Texas', 'Nevada'],
             'UK': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
             'Germany': ['Bavaria', 'Berlin', 'Hamburg', 'Saxony'],
@@ -257,7 +264,7 @@ def get_states():
             'Canada': ['Ontario', 'Quebec', 'British Columbia', 'Alberta'],
             'Singapore': ['Central', 'North', 'South', 'East', 'West']
         }
-        state_list = mock_states.get(country, [])
+        state_list = static_data_states.get(country, [])
     
     return jsonify({
         'states': state_list

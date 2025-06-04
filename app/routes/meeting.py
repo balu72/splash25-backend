@@ -78,7 +78,7 @@ def create_meeting():
     buyer_id = get_jwt_identity()
     
     # Validate required fields
-    required_fields = ['seller_id', 'time_slot_id']
+    required_fields = ['seller_id']
     for field in required_fields:
         if field not in data:
             return jsonify({

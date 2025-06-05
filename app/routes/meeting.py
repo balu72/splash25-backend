@@ -69,7 +69,7 @@ def get_meeting(meeting_id):
         'meeting': meeting.to_dict()
     }), 200
 
-@meeting.route('', methods=['POST'])
+@meeting.route('/request', methods=['POST'])
 @jwt_required()
 @buyer_required
 def create_meeting():
@@ -78,7 +78,7 @@ def create_meeting():
     buyer_id = get_jwt_identity()
     
     # Validate required fields
-    required_fields = ['seller_id']
+    required_fields = ['seller_id']   #removed time_slot from required fields
     for field in required_fields:
         if field not in data:
             return jsonify({
@@ -98,7 +98,7 @@ def create_meeting():
         return jsonify({
             'error': 'Invalid seller'
         }), 400
-    
+    """
     # Check if the time slot exists and is available
     time_slot = TimeSlot.query.get(data['time_slot_id'])
     if not time_slot:
@@ -116,19 +116,19 @@ def create_meeting():
         return jsonify({
             'error': 'Time slot does not belong to the specified seller'
         }), 400
-    
+    """
     # Create the meeting
     meeting = Meeting(
         buyer_id=buyer_id,
         seller_id=data['seller_id'],
-        time_slot_id=data['time_slot_id'],
+        #time_slot_id=data['time_slot_id'],
         notes=data.get('notes', ''),
         status=MeetingStatus.PENDING
     )
     
     # Mark the time slot as unavailable
-    time_slot.is_available = False
-    time_slot.meeting_id = meeting.id
+    #time_slot.is_available = False
+    #time_slot.meeting_id = meeting.id
     
     db.session.add(meeting)
     db.session.commit()

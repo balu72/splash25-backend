@@ -414,7 +414,7 @@ class Meeting(db.Model):
                 'business_name': self.seller.seller_profile.business_name if self.seller.seller_profile else self.seller.business_name
             },
             'attendee': self.attendee.to_dict() if self.attendee else None,
-            'time_slot': self.time_slot.to_dict() if self.time_slot else None
+            'time_slot': self.time_slot.to_dict() if self.time_slot else []
         }
 
 class TimeSlot(db.Model):

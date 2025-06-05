@@ -6,6 +6,9 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apk add --no-cache \
+    g++ \
+    libstdc++ \
+    build-base \
     gcc \
     musl-dev \
     postgresql-dev \

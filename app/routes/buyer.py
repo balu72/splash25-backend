@@ -328,6 +328,23 @@ def get_travel_plans():
     # Fetch travel plans for the user
     travel_plans = TravelPlan.query.filter_by(user_id=user_id).all()
     
+    if not travel_plans:
+        # if no travel plan found, create a new one 
+        travel_plan = TravelPlan(
+            user_id = user_id,
+            event_name = 'Wayanad Splash 2025',
+            event_start_date = datetime(2025, 7, 11),
+            event_end_date = datetime(2025, 7, 13),
+            venue = "Wayanad Tourism organization",
+            status = "Planned",
+            created_at = datetime.now()
+        )
+        db.session.add(travel_plan);
+        db.session.commit()
+
+        # Refetch the details
+        travel_plans = TravelPlan.query.filter_by(user_id=user_id).all()
+    
     return jsonify({
         'travel_plans': [plan.to_dict() for plan in travel_plans]
     }), 200

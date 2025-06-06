@@ -78,9 +78,30 @@ def get_own_profile():
     seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
     
     if not seller_profile:
-        return jsonify({
-            'error': 'Seller profile not found'
-        }), 404
+        # Auto-create profile for new sellers with data from users table
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Create new profile with pre-populated data from users table
+        seller_profile = SellerProfile(
+            user_id=user_id,
+            business_name=user.business_name or '',  # Pre-populate from users table
+            description=user.business_description or '',  # Pre-populate from users table
+            contact_email=user.email,  # Pre-populate from users table
+            status='active',
+            is_verified=False
+        )
+        
+        try:
+            db.session.add(seller_profile)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'error': 'Failed to create seller profile',
+                'message': str(e)
+            }), 500
     
     return jsonify({
         'seller': seller_profile.to_dict()

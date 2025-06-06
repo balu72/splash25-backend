@@ -996,6 +996,7 @@ def get_sellers():
             'isVerified': profile.is_verified,
             'stallNo': f"A{user.id:02d}",  # Placeholder
             'website': profile.website or '',
+            #'microsite': profile.microsite or '',
             'contactEmail': profile.contact_email or user.email,
             'contactPhone': profile.contact_phone or ''
         }

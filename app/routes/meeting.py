@@ -69,16 +69,16 @@ def get_meeting(meeting_id):
         'meeting': meeting.to_dict()
     }), 200
 
-@meeting.route('/request', methods=['POST'])
+@meeting.route('/buyer/request', methods=['POST'])
 @jwt_required()
 @buyer_required
-def create_meeting():
-    """Create a new meeting request"""
+def create_buyer_meeting_request():
+    """Create a new meeting request by the buyer"""
     data = request.get_json()
     buyer_id = get_jwt_identity()
     
     # Validate required fields
-    required_fields = ['seller_id']   #removed time_slot from required fields
+    required_fields = ['requested_id']  
     for field in required_fields:
         if field not in data:
             return jsonify({
@@ -92,8 +92,10 @@ def create_meeting():
             'error': 'Meeting requests are currently disabled'
         }), 400
     
+    seller_id = data['requested_id']
+    
     # Check if the seller exists
-    seller = User.query.get(data['seller_id'])
+    seller = User.query.get(seller_id)
     if not seller or seller.role != UserRole.SELLER.value:
         return jsonify({
             'error': 'Invalid seller'
@@ -117,10 +119,16 @@ def create_meeting():
             'error': 'Time slot does not belong to the specified seller'
         }), 400
     """
+    meeting = Meeting.query.filter_by(buyer_id=buyer_id, seller_id=seller_id).first()
+    if meeting:
+        return jsonify({
+            'error': 'Meeting request already exists'
+        }), 400
+    
     # Create the meeting
     meeting = Meeting(
         buyer_id=buyer_id,
-        seller_id=data['seller_id'],
+        seller_id=seller_id,
         #time_slot_id=data['time_slot_id'],
         notes=data.get('notes', ''),
         status=MeetingStatus.PENDING
@@ -137,6 +145,66 @@ def create_meeting():
         'message': 'Meeting request created successfully',
         'meeting': meeting.to_dict()
     }), 201
+
+@meeting.route('/seller/request', methods=['POST'])
+@jwt_required()
+@seller_required
+def create_seller_meeting_request():
+    """Create a new meeting request by the seller"""
+    data = request.get_json()
+    seller_id = get_jwt_identity()
+    
+    # Validate required fields
+    required_fields = ['requested_id']  
+    for field in required_fields:
+        if field not in data:
+            return jsonify({
+                'error': f'Missing required field: {field}'
+            }), 400
+    
+    # Check if meetings are enabled
+    meetings_enabled = SystemSetting.query.filter_by(key='meetings_enabled').first()
+    if not meetings_enabled or meetings_enabled.value != 'true':
+        return jsonify({
+            'error': 'Meeting requests are currently disabled'
+        }), 400
+    
+    buyer_id = data['requested_id']
+    
+    # Check if the seller exists
+    buyer = User.query.get(buyer_id)
+    if not buyer or buyer.role != UserRole.BUYER.value:
+        return jsonify({
+            'error': 'Invalid buyer'
+        }), 400
+
+    meeting = Meeting.query.filter_by(buyer_id=buyer_id, seller_id=seller_id).first()
+    if meeting:
+        return jsonify({
+            'error': 'Meeting request already exists'
+        }), 400
+    
+    # Create the meeting
+    meeting = Meeting(
+        buyer_id=buyer_id,
+        seller_id=seller_id,
+        #time_slot_id=data['time_slot_id'],
+        notes=data.get('notes', ''),
+        status=MeetingStatus.PENDING
+    )
+    
+    # Mark the time slot as unavailable
+    #time_slot.is_available = False
+    #time_slot.meeting_id = meeting.id
+    
+    db.session.add(meeting)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Meeting request created successfully',
+        'meeting': meeting.to_dict()
+    }), 201
+
 
 @meeting.route('/<int:meeting_id>/status', methods=['PUT'])
 @jwt_required()

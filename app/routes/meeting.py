@@ -242,19 +242,29 @@ def update_meeting_status(meeting_id):
             'error': 'Meeting not found'
         }), 404
     
-    # Check if the user is part of this meeting (buyer or seller)
-    if meeting.buyer_id != user_id and  meeting.seller_id != user_id:
-        logging.debug(f"User {user_id} does not have permission to update meeting {meeting_id}")
+    # Get the user to check role
+    user = User.query.get(user_id)
+    if not user:
         return jsonify({
-            'error': 'You do not have permission to update this meeting'
-        }), 403
+            'error': 'User not found'
+        }), 404
     
-    # Check if the user is the requestor (requestors cannot accept/reject their own requests)
-    if meeting.requestor_id == user_id:
-        logging.debug(f"User {user_id} cannot accept/reject their own meeting request")
-        return jsonify({
-            'error': 'You cannot accept or reject your own meeting request'
-        }), 403
+    # Check if the user has permission to update this meeting
+    # Admins can update any meeting, others must be participants
+    if user.role != UserRole.ADMIN.value:
+        if meeting.buyer_id != user_id and meeting.seller_id != user_id:
+            logging.debug(f"User {user_id} does not have permission to update meeting {meeting_id}")
+            return jsonify({
+                'error': 'You do not have permission to update this meeting'
+            }), 403
+        
+        # Check if the user is the requestor (requestors cannot accept/reject their own requests)
+        # This restriction doesn't apply to admins
+        if meeting.requestor_id == user_id:
+            logging.debug(f"User {user_id} cannot accept/reject their own meeting request")
+            return jsonify({
+                'error': 'You cannot accept or reject your own meeting request'
+            }), 403
     
     # Check if the meeting is in a pending state
     if meeting.status != MeetingStatus.PENDING:

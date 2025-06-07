@@ -374,6 +374,7 @@ class Meeting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    requestor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Added requestor_id field
     time_slot_id = db.Column(db.Integer, db.ForeignKey('time_slots.id'), nullable=True)
     attendee_id = db.Column(db.Integer, db.ForeignKey('seller_attendees.id'), nullable=True)  # Added missing field
     notes = db.Column(db.Text, nullable=True)
@@ -385,6 +386,7 @@ class Meeting(db.Model):
     
     buyer = db.relationship('User', foreign_keys=[buyer_id], backref=db.backref('buyer_meetings', lazy=True))
     seller = db.relationship('User', foreign_keys=[seller_id], backref=db.backref('seller_meetings', lazy=True))
+    requestor = db.relationship('User', foreign_keys=[requestor_id], backref=db.backref('requested_meetings', lazy=True))  # Added requestor relationship
     time_slot = db.relationship('TimeSlot', foreign_keys=[time_slot_id], backref=db.backref('meeting', uselist=False))
     attendee = db.relationship('SellerAttendee', foreign_keys=[attendee_id], backref=db.backref('meetings', lazy=True))  # Added relationship
     
@@ -393,6 +395,7 @@ class Meeting(db.Model):
             'id': self.id,
             'buyer_id': self.buyer_id,
             'seller_id': self.seller_id,
+            'requestor_id': self.requestor_id,  # Added requestor_id field
             'time_slot_id': self.time_slot_id,
             'attendee_id': self.attendee_id,
             'notes': self.notes,
@@ -413,6 +416,11 @@ class Meeting(db.Model):
                 'email': self.seller.email,
                 'business_name': self.seller.seller_profile.business_name if self.seller.seller_profile else self.seller.business_name
             },
+            'requestor': {  # Added requestor information
+                'id': self.requestor.id,
+                'username': self.requestor.username,
+                'email': self.requestor.email
+            } if self.requestor else None,
             'attendee': self.attendee.to_dict() if self.attendee else None,
             'time_slot': self.time_slot.to_dict() if self.time_slot else []
         }

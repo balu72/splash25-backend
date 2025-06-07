@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from ..models import db, Meeting, TimeSlot, User, UserRole, MeetingStatus, SystemSetting
 from ..utils.auth import buyer_required, seller_required
+import logging
 
 meeting = Blueprint('meeting', __name__, url_prefix='/api/meetings')
 
@@ -129,6 +130,7 @@ def create_buyer_meeting_request():
     meeting = Meeting(
         buyer_id=buyer_id,
         seller_id=seller_id,
+        requestor_id=buyer_id,  # Set requestor_id to current buyer
         #time_slot_id=data['time_slot_id'],
         notes=data.get('notes', ''),
         status=MeetingStatus.PENDING
@@ -188,6 +190,7 @@ def create_seller_meeting_request():
     meeting = Meeting(
         buyer_id=buyer_id,
         seller_id=seller_id,
+        requestor_id=seller_id,  # Set requestor_id to current seller
         #time_slot_id=data['time_slot_id'],
         notes=data.get('notes', ''),
         status=MeetingStatus.PENDING
@@ -208,11 +211,10 @@ def create_seller_meeting_request():
 
 @meeting.route('/<int:meeting_id>/status', methods=['PUT'])
 @jwt_required()
-@seller_required
 def update_meeting_status(meeting_id):
-    """Update the status of a meeting (accept/reject)"""
+    """Update the status of a meeting (accept/reject) - available to both buyers and sellers"""
     data = request.get_json()
-    seller_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     
     # Validate required fields
     if 'status' not in data:
@@ -240,14 +242,23 @@ def update_meeting_status(meeting_id):
             'error': 'Meeting not found'
         }), 404
     
-    # Check if the meeting belongs to the seller
-    if meeting.seller_id != seller_id:
+    # Check if the user is part of this meeting (buyer or seller)
+    if meeting.buyer_id != user_id and  meeting.seller_id != user_id:
+        logging.debug(f"User {user_id} does not have permission to update meeting {meeting_id}")
         return jsonify({
             'error': 'You do not have permission to update this meeting'
         }), 403
     
+    # Check if the user is the requestor (requestors cannot accept/reject their own requests)
+    if meeting.requestor_id == user_id:
+        logging.debug(f"User {user_id} cannot accept/reject their own meeting request")
+        return jsonify({
+            'error': 'You cannot accept or reject your own meeting request'
+        }), 403
+    
     # Check if the meeting is in a pending state
     if meeting.status != MeetingStatus.PENDING:
+        logging.debug(f"Cannot update meeting {meeting_id}. Current status: {meeting.status.value}")
         return jsonify({
             'error': f'Cannot update meeting status. Current status: {meeting.status.value}'
         }), 400

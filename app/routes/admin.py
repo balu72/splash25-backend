@@ -5,7 +5,8 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile
+from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
 admin = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -14,213 +15,615 @@ admin = Blueprint('admin', __name__, url_prefix='/api/admin')
 @admin_required
 def dashboard():
     """
-    Endpoint for admin dashboard data
+    Endpoint for admin dashboard data with real database queries
     """
-    # This is a placeholder for actual dashboard data
-    # In a real application, you would fetch relevant data from the database
-    return jsonify({
-        'message': 'Welcome to the Admin Dashboard',
-        'system_stats': {
-            'total_users': 150,
-            'users_by_role': {
-                'buyer': 120,
-                'seller': 29,
-                'admin': 1
+    try:
+        # Get real user statistics
+        total_users = User.query.count()
+        
+        # Count users by role
+        buyer_count = User.query.filter_by(role=UserRole.BUYER.value).count()
+        seller_count = User.query.filter_by(role=UserRole.SELLER.value).count()
+        admin_count = User.query.filter_by(role=UserRole.ADMIN.value).count()
+        
+        # Get real listing statistics
+        total_listings = Listing.query.filter_by(status='active').count() if hasattr(Listing, 'status') else Listing.query.count()
+        
+        # Get real meeting statistics (total bookings)
+        total_bookings = Meeting.query.count()
+        
+        # Get pending verifications (sellers not verified)
+        pending_verifications = SellerProfile.query.filter_by(is_verified=False).count()
+        
+        # Get recent activities (last 10 users registered)
+        recent_users = User.query.order_by(User.created_at.desc()).limit(5).all()
+        recent_activities = []
+        
+        for user in recent_users:
+            activity_type = 'new_user'
+            if user.role == UserRole.SELLER.value:
+                business_name = user.seller_profile.business_name if user.seller_profile else user.business_name or 'Unknown Business'
+                details = f'New seller registered: {business_name}'
+            elif user.role == UserRole.BUYER.value:
+                organization = user.buyer_profile.organization if user.buyer_profile else 'Unknown Organization'
+                details = f'New buyer registered: {organization}'
+            else:
+                details = f'New {user.role} registered: {user.username}'
+            
+            recent_activities.append({
+                'type': activity_type,
+                'details': details,
+                'timestamp': user.created_at.isoformat() + 'Z'
+            })
+        
+        # Add recent listings if available
+        if hasattr(Listing, 'created_at'):
+            recent_listings = Listing.query.order_by(Listing.created_at.desc()).limit(3).all()
+            for listing in recent_listings:
+                recent_activities.append({
+                    'type': 'new_listing',
+                    'details': f'New listing created: {listing.name}',
+                    'timestamp': listing.created_at.isoformat() + 'Z'
+                })
+        
+        # Sort activities by timestamp (newest first)
+        recent_activities.sort(key=lambda x: x['timestamp'], reverse=True)
+        recent_activities = recent_activities[:10]  # Limit to 10 most recent
+        
+        return jsonify({
+            'message': 'Welcome to the Admin Dashboard',
+            'system_stats': {
+                'total_users': total_users,
+                'users_by_role': {
+                    'buyer': buyer_count,
+                    'seller': seller_count,
+                    'admin': admin_count
+                },
+                'total_listings': total_listings,
+                'total_bookings': total_bookings,
+                'pending_verifications': pending_verifications
             },
-            'total_listings': 45,
-            'total_bookings': 230,
-            'pending_verifications': 3
-        },
-        'recent_activities': [
-            {
-                'type': 'new_user',
-                'details': 'New seller registered: Wayanad Eco Tours',
-                'timestamp': '2025-05-09T10:15:00Z'
+            'recent_activities': recent_activities
+        }), 200
+        
+    except Exception as e:
+        # Fallback to basic stats if there's an error
+        return jsonify({
+            'message': 'Welcome to the Admin Dashboard',
+            'system_stats': {
+                'total_users': User.query.count(),
+                'users_by_role': {
+                    'buyer': User.query.filter_by(role='buyer').count(),
+                    'seller': User.query.filter_by(role='seller').count(),
+                    'admin': User.query.filter_by(role='admin').count()
+                },
+                'total_listings': 0,
+                'total_bookings': 0,
+                'pending_verifications': 0
             },
-            {
-                'type': 'verification_request',
-                'details': 'Seller verification requested: Kerala Adventures',
-                'timestamp': '2025-05-08T14:30:00Z'
-            },
-            {
-                'type': 'new_listing',
-                'details': 'New listing created: Banasura Hill Trek',
-                'timestamp': '2025-05-08T09:45:00Z'
-            }
-        ]
-    }), 200
+            'recent_activities': []
+        }), 200
 
 @admin.route('/users', methods=['GET'])
 @admin_required
 def get_users():
     """
-    Endpoint to get all users
+    Endpoint to get all users with real database queries
     """
-    # In a real application, you would fetch users from the database
-    # with pagination and filtering
-    return jsonify({
-        'message': 'All users',
-        'users': [
-            {
-                'id': 1,
-                'username': 'admin',
-                'email': 'admin@splash25.com',
-                'role': 'admin',
-                'created_at': '2025-01-01T00:00:00Z'
-            },
-            {
-                'id': 2,
-                'username': 'seller1',
-                'email': 'seller1@example.com',
-                'role': 'seller',
-                'created_at': '2025-01-15T10:30:00Z',
-                'business_name': 'Wayanad Adventures',
-                'is_verified': True
-            },
-            {
-                'id': 3,
-                'username': 'buyer1',
-                'email': 'buyer1@example.com',
-                'role': 'buyer',
-                'created_at': '2025-02-10T15:45:00Z'
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        role_filter = request.args.get('role', None)
+        search = request.args.get('search', None)
+        
+        # Build query
+        query = User.query
+        
+        # Apply role filter
+        if role_filter and role_filter in ['buyer', 'seller', 'admin']:
+            query = query.filter_by(role=role_filter)
+        
+        # Apply search filter
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                db.or_(
+                    User.username.ilike(search_term),
+                    User.email.ilike(search_term),
+                    User.business_name.ilike(search_term)
+                )
+            )
+        
+        # Order by creation date (newest first)
+        query = query.order_by(User.created_at.desc())
+        
+        # Paginate results
+        users_pagination = query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        # Build user list with profile information
+        users_list = []
+        for user in users_pagination.items:
+            user_data = user.to_dict()
+            
+            # Add profile-specific information
+            if user.is_seller() and user.seller_profile:
+                user_data.update({
+                    'business_name': user.seller_profile.business_name,
+                    'business_description': user.seller_profile.description,
+                    'is_verified': user.seller_profile.is_verified,
+                    'contact_email': user.seller_profile.contact_email,
+                    'contact_phone': user.seller_profile.contact_phone,
+                    'status': user.seller_profile.status
+                })
+            elif user.is_buyer() and user.buyer_profile:
+                user_data.update({
+                    'organization': user.buyer_profile.organization,
+                    'designation': user.buyer_profile.designation,
+                    'name': user.buyer_profile.name,
+                    'status': user.buyer_profile.status
+                })
+            
+            # Add legacy fields for backward compatibility
+            if user.business_name:
+                user_data['business_name'] = user.business_name
+            if user.business_description:
+                user_data['business_description'] = user.business_description
+            user_data['is_verified'] = user.is_verified
+            
+            users_list.append(user_data)
+        
+        return jsonify({
+            'message': 'All users retrieved successfully',
+            'users': users_list,
+            'pagination': {
+                'page': users_pagination.page,
+                'pages': users_pagination.pages,
+                'per_page': users_pagination.per_page,
+                'total': users_pagination.total,
+                'has_next': users_pagination.has_next,
+                'has_prev': users_pagination.has_prev
             }
-        ]
-    }), 200
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to retrieve users: {str(e)}',
+            'users': [],
+            'pagination': {
+                'page': 1,
+                'pages': 0,
+                'per_page': 50,
+                'total': 0,
+                'has_next': False,
+                'has_prev': False
+            }
+        }), 500
 
 @admin.route('/users/<int:user_id>', methods=['GET'])
 @admin_required
 def get_user(user_id):
     """
-    Endpoint to get a specific user
+    Endpoint to get a specific user with real database queries
     """
-    # In a real application, you would fetch the user from the database
-    return jsonify({
-        'message': f'User details for ID: {user_id}',
-        'user': {
-            'id': user_id,
-            'username': 'seller1',
-            'email': 'seller1@example.com',
-            'role': 'seller',
-            'created_at': '2025-01-15T10:30:00Z',
-            'business_name': 'Wayanad Adventures',
-            'business_description': 'Providing authentic experiences in the heart of Wayanad',
-            'is_verified': True,
-            'verification_documents': [
-                {
-                    'type': 'Business Registration',
-                    'status': 'approved',
-                    'uploaded_at': '2025-01-15T10:30:00Z'
-                },
-                {
-                    'type': 'ID Proof',
-                    'status': 'approved',
-                    'uploaded_at': '2025-01-15T10:35:00Z'
-                }
-            ],
-            'listings': [
-                {
-                    'id': 1,
-                    'name': 'Wayanad Nature Camp',
-                    'status': 'active'
-                },
-                {
-                    'id': 2,
-                    'name': 'Splash25 Trekking Adventure',
-                    'status': 'active'
-                }
-            ]
-        }
-    }), 200
+    try:
+        # Find the user
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get basic user data
+        user_data = user.to_dict()
+        
+        # Add profile-specific information
+        if user.is_seller() and user.seller_profile:
+            user_data.update({
+                'business_name': user.seller_profile.business_name,
+                'business_description': user.seller_profile.description,
+                'is_verified': user.seller_profile.is_verified,
+                'contact_email': user.seller_profile.contact_email,
+                'contact_phone': user.seller_profile.contact_phone,
+                'status': user.seller_profile.status,
+                'seller_type': user.seller_profile.seller_type,
+                'target_market': user.seller_profile.target_market,
+                'website': user.seller_profile.website,
+                'instagram': user.seller_profile.instagram,
+                'address': user.seller_profile.address,
+                'state': user.seller_profile.state,
+                'country': user.seller_profile.country,
+                'gst': user.seller_profile.gst
+            })
+            
+            # Add listings for sellers
+            if hasattr(user, 'listings'):
+                user_data['listings'] = [listing.to_dict() for listing in user.listings]
+            else:
+                user_data['listings'] = []
+                
+            # Add stalls for sellers
+            if hasattr(user, 'stalls'):
+                user_data['stalls'] = [stall.to_dict() for stall in user.stalls]
+            else:
+                user_data['stalls'] = []
+                
+        elif user.is_buyer() and user.buyer_profile:
+            user_data.update({
+                'organization': user.buyer_profile.organization,
+                'designation': user.buyer_profile.designation,
+                'name': user.buyer_profile.name,
+                'status': user.buyer_profile.status,
+                'operator_type': user.buyer_profile.operator_type,
+                'country': user.buyer_profile.country,
+                'state': user.buyer_profile.state,
+                'city': user.buyer_profile.city,
+                'address': user.buyer_profile.address,
+                'mobile': user.buyer_profile.mobile,
+                'website': user.buyer_profile.website,
+                'instagram': user.buyer_profile.instagram,
+                'year_of_starting_business': user.buyer_profile.year_of_starting_business,
+                'selling_wayanad': user.buyer_profile.selling_wayanad,
+                'since_when': user.buyer_profile.since_when,
+                'bio': user.buyer_profile.bio,
+                'vip': user.buyer_profile.vip,
+                'gst': user.buyer_profile.gst,
+                'interests': user.buyer_profile.interests or [],
+                'properties_of_interest': user.buyer_profile.properties_of_interest or []
+            })
+            
+            # Add category information if available
+            if user.buyer_profile.category:
+                user_data['category'] = user.buyer_profile.category.to_dict()
+        
+        # Add legacy fields for backward compatibility
+        if user.business_name:
+            user_data['business_name'] = user.business_name
+        if user.business_description:
+            user_data['business_description'] = user.business_description
+        user_data['is_verified'] = user.is_verified
+        
+        # Add meeting statistics
+        if hasattr(user, 'buyer_meetings'):
+            user_data['buyer_meetings_count'] = len(user.buyer_meetings)
+        if hasattr(user, 'seller_meetings'):
+            user_data['seller_meetings_count'] = len(user.seller_meetings)
+        
+        # Add travel plans for buyers
+        if user.is_buyer() and hasattr(user, 'travel_plans'):
+            user_data['travel_plans'] = [plan.to_dict() for plan in user.travel_plans]
+        
+        return jsonify({
+            'message': f'User details for ID: {user_id}',
+            'user': user_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to retrieve user: {str(e)}'
+        }), 500
 
 @admin.route('/users/<int:user_id>', methods=['PUT'])
 @admin_required
 def update_user(user_id):
     """
-    Endpoint to update a user
+    Endpoint to update a user with real database operations
     """
     data = request.get_json()
     
-    # In a real application, you would update the user in the database
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
     
-    return jsonify({
-        'message': f'User {user_id} updated successfully',
-        'user': {
-            'id': user_id,
-            'username': data.get('username', 'seller1'),
-            'email': data.get('email', 'seller1@example.com'),
-            'role': data.get('role', 'seller'),
-            'is_verified': data.get('is_verified', True)
-        }
-    }), 200
+    try:
+        # Find the user
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Validate and update basic user fields
+        if 'username' in data:
+            # Check if username is already taken by another user
+            existing_user = User.query.filter(
+                User.username == data['username'],
+                User.id != user_id
+            ).first()
+            if existing_user:
+                return jsonify({'error': 'Username already exists'}), 409
+            user.username = data['username']
+        
+        if 'email' in data:
+            # Validate email format
+            import re
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, data['email']):
+                return jsonify({'error': 'Invalid email format'}), 400
+            
+            # Check if email is already taken by another user
+            existing_user = User.query.filter(
+                User.email == data['email'],
+                User.id != user_id
+            ).first()
+            if existing_user:
+                return jsonify({'error': 'Email already exists'}), 409
+            user.email = data['email']
+        
+        if 'role' in data:
+            # Validate role
+            valid_roles = ['buyer', 'seller', 'admin']
+            if data['role'] not in valid_roles:
+                return jsonify({'error': f'Invalid role. Must be one of: {valid_roles}'}), 400
+            user.role = data['role']
+        
+        # Update profile-specific fields based on user role
+        if user.is_seller() and user.seller_profile:
+            if 'business_name' in data:
+                user.seller_profile.business_name = data['business_name']
+            if 'business_description' in data:
+                user.seller_profile.description = data['business_description']
+            if 'is_verified' in data:
+                user.seller_profile.is_verified = bool(data['is_verified'])
+            if 'contact_email' in data:
+                user.seller_profile.contact_email = data['contact_email']
+            if 'contact_phone' in data:
+                user.seller_profile.contact_phone = data['contact_phone']
+            if 'status' in data:
+                user.seller_profile.status = data['status']
+            if 'seller_type' in data:
+                user.seller_profile.seller_type = data['seller_type']
+            if 'target_market' in data:
+                user.seller_profile.target_market = data['target_market']
+            if 'website' in data:
+                user.seller_profile.website = data['website']
+            if 'instagram' in data:
+                user.seller_profile.instagram = data['instagram']
+            if 'address' in data:
+                user.seller_profile.address = data['address']
+            if 'state' in data:
+                user.seller_profile.state = data['state']
+            if 'country' in data:
+                user.seller_profile.country = data['country']
+            if 'gst' in data:
+                user.seller_profile.gst = data['gst']
+        
+        elif user.is_buyer() and user.buyer_profile:
+            if 'organization' in data:
+                user.buyer_profile.organization = data['organization']
+            if 'designation' in data:
+                user.buyer_profile.designation = data['designation']
+            if 'name' in data:
+                user.buyer_profile.name = data['name']
+            if 'status' in data:
+                user.buyer_profile.status = data['status']
+            if 'operator_type' in data:
+                user.buyer_profile.operator_type = data['operator_type']
+            if 'mobile' in data:
+                user.buyer_profile.mobile = data['mobile']
+            if 'website' in data:
+                user.buyer_profile.website = data['website']
+            if 'instagram' in data:
+                user.buyer_profile.instagram = data['instagram']
+            if 'address' in data:
+                user.buyer_profile.address = data['address']
+            if 'city' in data:
+                user.buyer_profile.city = data['city']
+            if 'state' in data:
+                user.buyer_profile.state = data['state']
+            if 'country' in data:
+                user.buyer_profile.country = data['country']
+            if 'gst' in data:
+                user.buyer_profile.gst = data['gst']
+            if 'vip' in data:
+                user.buyer_profile.vip = bool(data['vip'])
+        
+        # Update legacy fields for backward compatibility
+        if 'business_name' in data:
+            user.business_name = data['business_name']
+        if 'business_description' in data:
+            user.business_description = data['business_description']
+        if 'is_verified' in data:
+            user.is_verified = bool(data['is_verified'])
+        
+        # Commit changes
+        db.session.commit()
+        
+        # Return updated user data
+        user_data = user.to_dict()
+        
+        # Add profile information to response
+        if user.is_seller() and user.seller_profile:
+            user_data.update({
+                'business_name': user.seller_profile.business_name,
+                'business_description': user.seller_profile.description,
+                'is_verified': user.seller_profile.is_verified,
+                'contact_email': user.seller_profile.contact_email,
+                'contact_phone': user.seller_profile.contact_phone,
+                'status': user.seller_profile.status
+            })
+        elif user.is_buyer() and user.buyer_profile:
+            user_data.update({
+                'organization': user.buyer_profile.organization,
+                'designation': user.buyer_profile.designation,
+                'name': user.buyer_profile.name,
+                'status': user.buyer_profile.status
+            })
+        
+        # Add legacy fields
+        if user.business_name:
+            user_data['business_name'] = user.business_name
+        if user.business_description:
+            user_data['business_description'] = user.business_description
+        user_data['is_verified'] = user.is_verified
+        
+        return jsonify({
+            'message': f'User {user_id} updated successfully',
+            'user': user_data
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update user: {str(e)}'}), 500
 
 @admin.route('/verifications', methods=['GET'])
 @admin_required
 def get_verifications():
     """
-    Endpoint to get pending seller verifications
+    Endpoint to get pending seller verifications with real database queries
     """
-    # In a real application, you would fetch pending verifications from the database
-    return jsonify({
-        'message': 'Pending seller verifications',
-        'verifications': [
-            {
-                'id': 1,
-                'user_id': 4,
-                'username': 'seller2',
-                'business_name': 'Kerala Adventures',
-                'documents': [
-                    {
-                        'type': 'Business Registration',
-                        'url': '/documents/seller2/business-reg.pdf',
-                        'uploaded_at': '2025-05-08T14:30:00Z'
-                    },
-                    {
-                        'type': 'ID Proof',
-                        'url': '/documents/seller2/id-proof.pdf',
-                        'uploaded_at': '2025-05-08T14:35:00Z'
-                    }
-                ]
-            },
-            {
-                'id': 2,
-                'user_id': 5,
-                'username': 'seller3',
-                'business_name': 'Wayanad Eco Tours',
-                'documents': [
-                    {
-                        'type': 'Business Registration',
-                        'url': '/documents/seller3/business-reg.pdf',
-                        'uploaded_at': '2025-05-09T10:15:00Z'
-                    }
-                ]
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        status_filter = request.args.get('status', 'pending')
+        
+        # Query for sellers with pending verification
+        query = db.session.query(User, SellerProfile).join(
+            SellerProfile, User.id == SellerProfile.user_id
+        ).filter(
+            User.role == UserRole.SELLER.value,
+            SellerProfile.is_verified == False
+        )
+        
+        # Apply status filter if needed
+        if status_filter == 'pending':
+            query = query.filter(SellerProfile.status.in_(['pending', 'active']))
+        elif status_filter == 'all':
+            pass  # No additional filter
+        
+        # Order by creation date (newest first)
+        query = query.order_by(SellerProfile.created_at.desc())
+        
+        # Get all results for now (can add pagination later)
+        results = query.all()
+        
+        # Build verification list
+        verifications = []
+        for user, seller_profile in results:
+            verification_data = {
+                'id': seller_profile.id,  # Use seller_profile.id as verification ID
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'business_name': seller_profile.business_name,
+                'status': 'pending' if not seller_profile.is_verified else 'verified',
+                'created_at': seller_profile.created_at.isoformat() + 'Z' if seller_profile.created_at else None,
+                'contact_email': seller_profile.contact_email,
+                'contact_phone': seller_profile.contact_phone,
+                'seller_type': seller_profile.seller_type,
+                'target_market': seller_profile.target_market,
+                'website': seller_profile.website,
+                'address': seller_profile.address,
+                'state': seller_profile.state,
+                'country': seller_profile.country,
+                'gst': seller_profile.gst,
+                'documents': []  # Placeholder for document system
             }
-        ]
-    }), 200
+            
+            # Add mock documents structure for now
+            # In a real system, you would have a separate documents table
+            if seller_profile.business_name:
+                verification_data['documents'].append({
+                    'type': 'Business Registration',
+                    'status': 'pending',
+                    'uploaded_at': seller_profile.created_at.isoformat() + 'Z' if seller_profile.created_at else None
+                })
+            
+            verifications.append(verification_data)
+        
+        return jsonify({
+            'message': 'Pending seller verifications retrieved successfully',
+            'verifications': verifications,
+            'total': len(verifications),
+            'pending_count': len([v for v in verifications if v['status'] == 'pending'])
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to retrieve verifications: {str(e)}',
+            'verifications': [],
+            'total': 0,
+            'pending_count': 0
+        }), 500
 
 @admin.route('/verifications/<int:verification_id>', methods=['PUT'])
 @admin_required
 def update_verification(verification_id):
     """
-    Endpoint to approve or reject a seller verification
+    Endpoint to approve or reject a seller verification with real database operations
     """
     data = request.get_json()
     
     if 'status' not in data or data['status'] not in ['approved', 'rejected']:
         return jsonify({'error': 'Status must be either "approved" or "rejected"'}), 400
     
-    # In a real application, you would update the verification status in the database
-    
-    return jsonify({
-        'message': f'Verification {verification_id} {data["status"]}',
-        'verification': {
+    try:
+        # Find the seller profile by verification_id (which is seller_profile.id)
+        seller_profile = SellerProfile.query.get(verification_id)
+        if not seller_profile:
+            return jsonify({'error': 'Verification not found'}), 404
+        
+        # Get the associated user
+        user = User.query.get(seller_profile.user_id)
+        if not user:
+            return jsonify({'error': 'Associated user not found'}), 404
+        
+        # Update verification status
+        if data['status'] == 'approved':
+            seller_profile.is_verified = True
+            seller_profile.status = 'active'
+            # Also update legacy field for backward compatibility
+            user.is_verified = True
+            
+            message = f'Seller {seller_profile.business_name} verification approved'
+        else:  # rejected
+            seller_profile.is_verified = False
+            seller_profile.status = 'rejected'
+            # Also update legacy field for backward compatibility
+            user.is_verified = False
+            
+            message = f'Seller {seller_profile.business_name} verification rejected'
+        
+        # Update timestamp
+        seller_profile.updated_at = datetime.utcnow()
+        
+        # Add notes if provided
+        if 'notes' in data:
+            # In a real system, you might have a separate notes field or verification_notes table
+            pass
+        
+        # Commit changes
+        db.session.commit()
+        
+        # Prepare response data
+        verification_data = {
             'id': verification_id,
-            'user_id': 4,
-            'username': 'seller2',
-            'business_name': 'Kerala Adventures',
-            'status': data['status'],
-            'updated_at': '2025-05-10T15:30:00Z'
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'business_name': seller_profile.business_name,
+            'status': 'approved' if seller_profile.is_verified else 'rejected',
+            'updated_at': seller_profile.updated_at.isoformat() + 'Z',
+            'contact_email': seller_profile.contact_email,
+            'contact_phone': seller_profile.contact_phone,
+            'seller_type': seller_profile.seller_type,
+            'target_market': seller_profile.target_market,
+            'website': seller_profile.website,
+            'address': seller_profile.address,
+            'state': seller_profile.state,
+            'country': seller_profile.country,
+            'gst': seller_profile.gst
         }
-    }), 200
+        
+        return jsonify({
+            'message': message,
+            'verification': verification_data
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update verification: {str(e)}'}), 500
 
 @admin.route('/create-admin', methods=['POST'])
 @admin_required

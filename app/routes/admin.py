@@ -1029,3 +1029,63 @@ def update_buyer_profile(buyer_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to update buyer profile: {str(e)}'}), 500
+
+@admin.route('/sellers/<int:seller_id>', methods=['PUT'])
+@admin_required
+def update_seller_profile(seller_id):
+    """
+    Update seller profile (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the seller profile by user_id (seller_id is actually user_id)
+        seller_profile = SellerProfile.query.filter_by(user_id=seller_id).first()
+        if not seller_profile:
+            return jsonify({'error': 'Seller profile not found'}), 404
+        
+        # Get the associated user
+        user = User.query.get(seller_id)
+        if not user or not user.is_seller():
+            return jsonify({'error': 'User not found or not a seller'}), 404
+        
+        # Update seller profile fields
+        updatable_fields = [
+            'business_name', 'description', 'seller_type', 'target_market',
+            'website', 'contact_email', 'contact_phone', 'address', 
+            'state', 'country', 'gst', 'status'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                # Handle string fields
+                setattr(seller_profile, field, data[field])
+        
+        # Handle boolean fields separately
+        if 'is_verified' in data:
+            seller_profile.is_verified = bool(data['is_verified'])
+        
+        # Update timestamp
+        seller_profile.updated_at = datetime.utcnow()
+        
+        # Commit changes
+        db.session.commit()
+        
+        # Return updated seller profile data
+        seller_data = seller_profile.to_dict()
+        
+        return jsonify({
+            'message': f'Seller profile {seller_id} updated successfully',
+            'seller': seller_data
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update seller profile: {str(e)}'}), 500

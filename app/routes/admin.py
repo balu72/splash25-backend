@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -955,3 +955,77 @@ def reject_buyer(buyer_id):
     return jsonify({
         'message': 'Buyer rejected successfully'
     }), 200
+
+@admin.route('/buyers/<int:buyer_id>', methods=['PUT'])
+@admin_required
+def update_buyer_profile(buyer_id):
+    """
+    Update buyer profile (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the buyer profile by user_id (buyer_id is actually user_id)
+        buyer_profile = BuyerProfile.query.filter_by(user_id=buyer_id).first()
+        if not buyer_profile:
+            return jsonify({'error': 'Buyer profile not found'}), 404
+        
+        # Get the associated user
+        user = User.query.get(buyer_id)
+        if not user or not user.is_buyer():
+            return jsonify({'error': 'User not found or not a buyer'}), 404
+        
+        # Update buyer profile fields
+        updatable_fields = [
+            'name', 'organization', 'designation', 'operator_type',
+            'country', 'state', 'city', 'address', 'mobile', 'website', 
+            'instagram', 'year_of_starting_business', 
+            'since_when', 'bio', 'vip', 'gst', 'interests', 
+            'properties_of_interest', 'status'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                if field == 'vip':
+                    # Handle boolean fields
+                    setattr(buyer_profile, field, bool(data[field]))
+                elif field == 'year_of_starting_business' or field == 'since_when':
+                    # Handle integer fields
+                    if data[field] is not None:
+                        setattr(buyer_profile, field, int(data[field]))
+                    else:
+                        setattr(buyer_profile, field, None)
+                elif field in ['interests', 'properties_of_interest']:
+                    # Handle JSON array fields
+                    if isinstance(data[field], list):
+                        setattr(buyer_profile, field, data[field])
+                    else:
+                        setattr(buyer_profile, field, [])
+                else:
+                    # Handle string fields
+                    setattr(buyer_profile, field, data[field])
+        
+        # Update timestamp
+        buyer_profile.updated_at = datetime.utcnow()
+        
+        # Commit changes
+        db.session.commit()
+        
+        # Return updated buyer profile data
+        buyer_data = buyer_profile.to_dict()
+        
+        return jsonify({
+            'message': f'Buyer profile {buyer_id} updated successfully',
+            'buyer': buyer_data
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update buyer profile: {str(e)}'}), 500

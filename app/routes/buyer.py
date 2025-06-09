@@ -158,8 +158,7 @@ def update_profile():
         'name', 'organization', 'designation', 'operator_type', 
         'interests', 'properties_of_interest', 'country', 'state', 
         'city', 'address', 'mobile', 'website', 'instagram', 
-        'year_of_starting_business', 'selling_wayanad', 'since_when', 
-        'bio', 'profile_image',
+        'year_of_starting_business', 'bio', 'profile_image',
         # Enhanced fields
         'category_id', 'salutation', 'first_name', 'last_name', 
         'vip', 'status', 'gst', 'pincode'
@@ -229,8 +228,6 @@ def create_profile():
         website=data.get('website'),
         instagram=data.get('instagram'),
         year_of_starting_business=data.get('year_of_starting_business'),
-        selling_wayanad=data.get('selling_wayanad', False),
-        since_when=data.get('since_when'),
         bio=data.get('bio'),
         profile_image=data.get('profile_image'),
         # Enhanced fields

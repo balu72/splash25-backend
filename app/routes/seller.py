@@ -1,4 +1,6 @@
 from nc_py_api import Nextcloud, NextcloudException
+from io import BytesIO
+from PIL import Image
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -244,8 +246,13 @@ def upload_seller_images():
             """
             # Upload file
             try:
-                with open(file_data, 'rb') as f:
-                    nc.files.upload_stream(upload_url, f)
+               # with open(file_data, 'rb') as f:
+                  #  nc.files.upload_stream(upload_url, f)
+                buf = BytesIO()
+                Image.save(buf)
+                buf.seek(0)
+                nc.files.upload_stream(upload_url, buf)
+                
                 image_record = {
                     'id': str(uuid.uuid4()),
                     'filename': file.filename,

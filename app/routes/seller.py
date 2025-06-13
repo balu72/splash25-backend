@@ -1,5 +1,8 @@
+from nc_py_api import Nextcloud, NextcloudException
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+import logging
 from ..models import db, User, UserRole, SellerProfile, SellerAttendee, SellerBusinessInfo, SellerFinancialInfo, SellerReferences, PropertyType, Interest
 from ..utils.auth import seller_required, admin_required
 
@@ -106,6 +109,185 @@ def get_own_profile():
     return jsonify({
         'seller': seller_profile.to_dict()
     }), 200
+
+@seller.route('/profile/images', methods=['POST'])
+@jwt_required()
+@seller_required
+def upload_seller_images():
+    """Upload multiple business images for the current seller"""
+    import os
+    import requests
+    import uuid
+    from datetime import datetime
+    from werkzeug.utils import secure_filename
+    import base64
+    
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Check if files are present in request
+    if 'files' not in request.files:
+        return jsonify({'error': 'No files provided'}), 400
+    
+    files = request.files.getlist('files')
+    if not files or len(files) == 0:
+        return jsonify({'error': 'No files selected'}), 400
+    
+    # Validate file count (max 5)
+    if len(files) > 5:
+        return jsonify({'error': 'Maximum 5 images allowed'}), 400
+    
+    # Get external storage credentials from environment
+    storage_url = os.getenv('EXTERNAL_STORAGE_URL')
+    storage_user = os.getenv('EXTERNAL_STORAGE_USER')
+    storage_password = os.getenv('EXTERNAL_STORAGE_PASSWORD')
+    
+    if not all([storage_url, storage_user, storage_password]):
+        return jsonify({'error': 'External storage configuration missing'}), 500
+    
+    nc = Nextcloud(nextcloud_url=storage_url, nc_auth_user=storage_user, nc_auth_pass=storage_password)
+    
+    # Validate files
+    allowed_extensions = {'jpg', 'jpeg', 'png'}
+    max_size = 2 * 1024 * 1024  # 2MB
+    errors = []
+    valid_files = []
+    
+    for file in files:
+        if file.filename == '':
+            continue
+            
+        # Check file extension
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        if file_ext not in allowed_extensions:
+            errors.append(f"File '{file.filename}' has invalid format. Only JPEG and PNG are allowed.")
+            continue
+        
+        # Check file size
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+        
+        if file_size > max_size:
+            errors.append(f"File '{file.filename}' exceeds 2MB limit.")
+            continue
+            
+        valid_files.append(file)
+    
+    if errors:
+        return jsonify({'error': 'File validation failed', 'details': errors}), 400
+    
+    if not valid_files:
+        return jsonify({'error': 'No valid files to upload'}), 400
+    
+    # If total images would exceed 5, replace all existing images
+    existing_images = seller_profile.business_images or []
+    if len(existing_images) + len(valid_files) > 5:
+        # Replace all existing images
+        seller_profile.business_images = []
+        db.session.commit()
+    
+    # Upload files to external storage
+    uploaded_images = []
+    upload_errors = []
+    
+    # Create seller directory path
+    seller_dir = f"seller_{user_id}"
+    remote_dir_path = f"{storage_url}/{seller_dir}"
+    try:
+        nc.files.listdir(remote_dir_path)
+    except NextcloudException as e:
+        if e.status_code != 404:
+            raise e
+        else:
+            try:
+                nc.files.mkdir(remote_dir_path)
+            except Exception as e:
+                logging.debug("Exception while creating seller directory:{e}")
+                return jsonify({'Exception': 'Failed to create seller directory'}), 500
+
+    for file in valid_files:
+        try:
+            # Generate unique filename
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            unique_id = str(uuid.uuid4())[:8]
+            secure_name = secure_filename(file.filename)
+            filename = f"{timestamp}_{unique_id}_{secure_name}"
+            
+            # Prepare file data for upload
+            file_data = file.read()
+            file.seek(0)  # Reset for potential retry
+            
+            # Create basic auth header
+            auth_string = f"{storage_user}:{storage_password}"
+            auth_bytes = auth_string.encode('ascii')
+            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+        
+            
+            # Upload to external storage
+            upload_url = f"{storage_url}/{seller_dir}/{filename}"
+            """
+            headers = {
+                'Authorization': f'Basic {auth_b64}',
+                'Content-Type': file.content_type or 'application/octet-stream'
+            }
+            """
+            # Upload file
+            try:
+                with open(file_data, 'rb') as f:
+                    nc.files.upload_stream(upload_url, f)
+                image_record = {
+                    'id': str(uuid.uuid4()),
+                    'filename': file.filename,
+                    'url': upload_url,
+                    'size': len(file_data),
+                    'uploaded_at': datetime.utcnow().isoformat(),
+                    'mime_type': file.content_type or 'image/jpeg'
+                }
+                uploaded_images.append(image_record)
+            except Exception as e:
+                logging.debug("Exception while uploading file:{e}")
+                return jsonify({'Exception': 'Failed to upload file'}), 500
+            
+        except Exception as e:
+            upload_errors.append(f"Error uploading '{file.filename}': {str(e)}")
+    
+    if not uploaded_images and upload_errors:
+        return jsonify({'error': 'All uploads failed', 'details': upload_errors}), 500
+    
+    # Update seller profile with new images
+    current_images = seller_profile.business_images or []
+    updated_images = current_images + uploaded_images
+    seller_profile.business_images = updated_images
+    
+    try:
+        db.session.commit()
+        
+        response_data = {
+            'message': 'Images uploaded successfully',
+            'uploaded_images': uploaded_images,
+            'total_images': len(updated_images),
+            'replaced_existing': len(existing_images) + len(valid_files) > 5
+        }
+        
+        if upload_errors:
+            response_data['warnings'] = upload_errors
+            
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to save image records', 'message': str(e)}), 500
 
 @seller.route('/profile', methods=['PUT'])
 @jwt_required()

@@ -280,6 +280,10 @@ class SellerProfile(db.Model):
     assn_member = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
     gst = db.Column(db.String(20), nullable=True)
+    
+    # Business Images
+    business_images = db.Column(db.JSON, default=list)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
@@ -310,11 +314,11 @@ class SellerProfile(db.Model):
             'contact_phone': self.contact_phone,
             'address': self.address,
             'is_verified': self.is_verified,
+            'business_images': self.business_images or [],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'target_market_relationships': [interest.to_dict() for interest in self.target_market_relationships]
         }
-
 class Stall(db.Model):
     __tablename__ = 'stalls'
     

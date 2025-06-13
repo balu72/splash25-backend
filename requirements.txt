@@ -7,3 +7,6 @@ Flask-CORS>=4.0.0
 python-dotenv>=1.0.0
 pandas==2.2.3
 psycopg2-binary==2.9.9
+Werkzeug==3.0.1
+requests==2.31.0
+nc-py-api==0.20.2

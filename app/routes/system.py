@@ -106,7 +106,9 @@ def get_meeting_metadata():
             'meeting_interval', 
             'day_start_time',
             'day_end_time',
-            'meeting_breaks'
+            'meeting_breaks',
+            'max_seller_attendees_per_day',
+            'max_buyer_meetings_per_day'
         ]
         
         metadata = {}
@@ -119,12 +121,19 @@ def get_meeting_metadata():
                         metadata[key] = json.loads(setting.value)
                     except (json.JSONDecodeError, TypeError):
                         metadata[key] = []
-                elif key in ['meeting_duration', 'meeting_interval']:
+                elif key in ['meeting_duration', 'meeting_interval', 'max_seller_attendees_per_day', 'max_buyer_meetings_per_day']:
                     # Convert to integer
                     try:
                         metadata[key] = int(setting.value)
                     except (ValueError, TypeError):
-                        metadata[key] = 10 if key == 'meeting_duration' else 5
+                        if key == 'meeting_duration':
+                            metadata[key] = 10
+                        elif key == 'meeting_interval':
+                            metadata[key] = 5
+                        elif key == 'max_seller_attendees_per_day':
+                            metadata[key] = 230
+                        elif key == 'max_buyer_meetings_per_day':
+                            metadata[key] = 30
                 else:
                     metadata[key] = setting.value
             else:
@@ -146,6 +155,10 @@ def get_meeting_metadata():
                             "endTime": "1:00 PM"
                         }
                     ]
+                elif key == 'max_seller_attendees_per_day':
+                    metadata[key] = 230
+                elif key == 'max_buyer_meetings_per_day':
+                    metadata[key] = 30
         
         return jsonify({
             'metadata': metadata
@@ -194,6 +207,19 @@ def update_meeting_metadata():
                 'error': 'Breaks must be an array'
             }), 400
         
+        # Validate meeting limits (optional fields)
+        if 'maxSellerAttendees' in data:
+            if not isinstance(data['maxSellerAttendees'], int) or data['maxSellerAttendees'] < 1:
+                return jsonify({
+                    'error': 'Max seller attendees must be a positive integer'
+                }), 400
+        
+        if 'maxBuyerMeetings' in data:
+            if not isinstance(data['maxBuyerMeetings'], int) or data['maxBuyerMeetings'] < 1:
+                return jsonify({
+                    'error': 'Max buyer meetings must be a positive integer'
+                }), 400
+        
         # Convert frontend format to backend format
         day_start_time = f"{data['dayStartTime']} {data['dayStartPeriod']}"
         day_end_time = f"{data['dayEndTime']} {data['dayEndPeriod']}"
@@ -217,6 +243,13 @@ def update_meeting_metadata():
             ('meeting_breaks', json.dumps(breaks_data), 'Meeting breaks configuration')
         ]
         
+        # Add meeting limits if provided
+        if 'maxSellerAttendees' in data:
+            settings_to_update.append(('max_seller_attendees_per_day', str(data['maxSellerAttendees']), 'Maximum seller attendees per day'))
+        
+        if 'maxBuyerMeetings' in data:
+            settings_to_update.append(('max_buyer_meetings_per_day', str(data['maxBuyerMeetings']), 'Maximum buyer meetings per day'))
+        
         for key, value, description in settings_to_update:
             setting = SystemSetting.query.filter_by(key=key).first()
             if setting:
@@ -232,15 +265,25 @@ def update_meeting_metadata():
         
         db.session.commit()
         
+        # Prepare response metadata
+        response_metadata = {
+            'meetingDuration': data['meetingDuration'],
+            'intervalBetweenSlots': data['intervalBetweenSlots'],
+            'dayStartTime': day_start_time,
+            'dayEndTime': day_end_time,
+            'breaks': breaks_data
+        }
+        
+        # Add meeting limits to response if they were provided
+        if 'maxSellerAttendees' in data:
+            response_metadata['maxSellerAttendees'] = data['maxSellerAttendees']
+        
+        if 'maxBuyerMeetings' in data:
+            response_metadata['maxBuyerMeetings'] = data['maxBuyerMeetings']
+        
         return jsonify({
             'message': 'Meeting metadata updated successfully',
-            'metadata': {
-                'meetingDuration': data['meetingDuration'],
-                'intervalBetweenSlots': data['intervalBetweenSlots'],
-                'dayStartTime': day_start_time,
-                'dayEndTime': day_end_time,
-                'breaks': breaks_data
-            }
+            'metadata': response_metadata
         }), 200
         
     except Exception as e:
@@ -255,7 +298,7 @@ def initialize_meeting_metadata():
     """Initialize default meeting metadata settings (admin only)"""
     try:
         # Check if meeting metadata already exists
-        existing_keys = ['meeting_duration', 'meeting_interval', 'day_start_time', 'day_end_time', 'meeting_breaks']
+        existing_keys = ['meeting_duration', 'meeting_interval', 'day_start_time', 'day_end_time', 'meeting_breaks', 'max_seller_attendees_per_day', 'max_buyer_meetings_per_day']
         existing_settings = SystemSetting.query.filter(SystemSetting.key.in_(existing_keys)).count()
         
         if existing_settings > 0:
@@ -278,7 +321,9 @@ def initialize_meeting_metadata():
             ('meeting_interval', '5', 'Interval between meeting slots in minutes'),
             ('day_start_time', '9:00 AM', 'Day start time for meetings'),
             ('day_end_time', '5:00 PM', 'Day end time for meetings'),
-            ('meeting_breaks', json.dumps(default_breaks), 'Meeting breaks configuration')
+            ('meeting_breaks', json.dumps(default_breaks), 'Meeting breaks configuration'),
+            ('max_seller_attendees_per_day', '230', 'Maximum seller attendees per day'),
+            ('max_buyer_meetings_per_day', '30', 'Maximum buyer meetings per day')
         ]
         
         for key, value, description in default_metadata:
@@ -298,7 +343,9 @@ def initialize_meeting_metadata():
                 'intervalBetweenSlots': 5,
                 'dayStartTime': '9:00 AM',
                 'dayEndTime': '5:00 PM',
-                'breaks': default_breaks
+                'breaks': default_breaks,
+                'maxSellerAttendees': 230,
+                'maxBuyerMeetings': 30
             }
         }), 201
         

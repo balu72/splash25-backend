@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -1089,3 +1089,192 @@ def update_seller_profile(seller_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to update seller profile: {str(e)}'}), 500
+
+# Buyer Category Management Endpoints
+
+@admin.route('/buyer-categories', methods=['GET'])
+@admin_required
+def get_buyer_categories():
+    """
+    Get all buyer categories (admin only)
+    """
+    try:
+        categories = BuyerCategory.query.all()
+        return jsonify({
+            'buyer_categories': [category.to_dict() for category in categories]
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch buyer categories: {str(e)}'
+        }), 500
+
+@admin.route('/buyer-categories', methods=['POST'])
+@admin_required
+def create_buyer_category():
+    """
+    Create new buyer category (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    if 'name' not in data:
+        return jsonify({'error': 'Missing required field: name'}), 400
+    
+    # Check if category name already exists
+    existing_category = BuyerCategory.query.filter_by(name=data['name']).first()
+    if existing_category:
+        return jsonify({'error': 'Category name already exists'}), 409
+    
+    try:
+        # Create new buyer category
+        category = BuyerCategory(
+            name=data['name'],
+            deposit_amount=data.get('deposit_amount'),
+            entry_fee=data.get('entry_fee'),
+            accommodation_hosted=data.get('accommodation_hosted', False),
+            transfers_hosted=data.get('transfers_hosted', False),
+            max_meetings=data.get('max_meetings'),
+            min_meetings=data.get('min_meetings')
+        )
+        
+        db.session.add(category)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Buyer category created successfully',
+            'buyer_category': category.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to create buyer category: {str(e)}'
+        }), 500
+
+@admin.route('/buyer-categories/<int:category_id>', methods=['PUT'])
+@admin_required
+def update_buyer_category(category_id):
+    """
+    Update buyer category (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the category
+        category = BuyerCategory.query.get(category_id)
+        if not category:
+            return jsonify({'error': 'Buyer category not found'}), 404
+        
+        # Check if new name conflicts with existing category
+        if 'name' in data and data['name'] != category.name:
+            existing_category = BuyerCategory.query.filter_by(name=data['name']).first()
+            if existing_category:
+                return jsonify({'error': 'Category name already exists'}), 409
+        
+        # Update category fields
+        updatable_fields = [
+            'name', 'deposit_amount', 'entry_fee', 
+            'accommodation_hosted', 'transfers_hosted',
+            'max_meetings', 'min_meetings'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                if field in ['accommodation_hosted', 'transfers_hosted']:
+                    # Handle boolean fields
+                    setattr(category, field, bool(data[field]))
+                elif field in ['max_meetings', 'min_meetings']:
+                    # Handle integer fields
+                    if data[field] is not None:
+                        setattr(category, field, int(data[field]))
+                    else:
+                        setattr(category, field, None)
+                elif field in ['deposit_amount', 'entry_fee']:
+                    # Handle decimal fields
+                    if data[field] is not None:
+                        setattr(category, field, float(data[field]))
+                    else:
+                        setattr(category, field, None)
+                else:
+                    # Handle string fields
+                    setattr(category, field, data[field])
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Buyer category {category_id} updated successfully',
+            'buyer_category': category.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update buyer category: {str(e)}'}), 500
+
+@admin.route('/buyer-categories/<int:category_id>', methods=['DELETE'])
+@admin_required
+def delete_buyer_category(category_id):
+    """
+    Delete buyer category (admin only)
+    """
+    try:
+        # Find the category
+        category = BuyerCategory.query.get(category_id)
+        if not category:
+            return jsonify({'error': 'Buyer category not found'}), 404
+        
+        # Check if category is being used by any buyers
+        buyers_using_category = BuyerProfile.query.filter_by(category_id=category_id).count()
+        if buyers_using_category > 0:
+            return jsonify({
+                'error': f'Cannot delete category. {buyers_using_category} buyers are currently using this category.'
+            }), 400
+        
+        # Delete the category
+        db.session.delete(category)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Buyer category {category_id} deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete buyer category: {str(e)}'}), 500
+
+@admin.route('/buyer-categories/<int:category_id>', methods=['GET'])
+@admin_required
+def get_buyer_category(category_id):
+    """
+    Get specific buyer category (admin only)
+    """
+    try:
+        category = BuyerCategory.query.get(category_id)
+        if not category:
+            return jsonify({'error': 'Buyer category not found'}), 404
+        
+        # Get buyers count for this category
+        buyers_count = BuyerProfile.query.filter_by(category_id=category_id).count()
+        
+        category_data = category.to_dict()
+        category_data['buyers_count'] = buyers_count
+        
+        return jsonify({
+            'buyer_category': category_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch buyer category: {str(e)}'
+        }), 500

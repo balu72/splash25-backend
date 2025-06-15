@@ -228,6 +228,7 @@ class BuyerProfile(db.Model):
             'organization': self.organization,
             'designation': self.designation,
             'operator_type': self.operator_type,
+            'category_id': self.category_id,
             'category': self.category.to_dict() if self.category else None,
             'salutation': self.salutation,
             'first_name': self.first_name,

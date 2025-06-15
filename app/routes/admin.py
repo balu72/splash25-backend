@@ -985,7 +985,7 @@ def update_buyer_profile(buyer_id):
             'country', 'state', 'city', 'address', 'mobile', 'website', 
             'instagram', 'year_of_starting_business', 
             'since_when', 'bio', 'vip', 'gst', 'interests', 
-            'properties_of_interest', 'status'
+            'properties_of_interest', 'status', 'category_id'
         ]
         
         for field in updatable_fields:
@@ -993,7 +993,7 @@ def update_buyer_profile(buyer_id):
                 if field == 'vip':
                     # Handle boolean fields
                     setattr(buyer_profile, field, bool(data[field]))
-                elif field == 'year_of_starting_business' or field == 'since_when':
+                elif field in ['year_of_starting_business', 'since_when', 'category_id']:
                     # Handle integer fields
                     if data[field] is not None:
                         setattr(buyer_profile, field, int(data[field]))

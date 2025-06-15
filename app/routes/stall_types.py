@@ -64,7 +64,10 @@ def create_stall_type():
             min_meetings_per_attendee=int(data.get('min_meetings_per_attendee', 0)),
             size=data['size'],
             saleable=data.get('saleable', True),
-            inclusions=data.get('inclusions', '')
+            inclusions=data.get('inclusions', ''),
+            dinner_passes=int(data.get('dinner_passes', 1)),
+            max_additional_seller_passes=int(data.get('max_additional_seller_passes', 1)),
+            price_per_additional_pass=int(data.get('price_per_additional_pass', 3500))
         )
         
         db.session.add(stall_type)
@@ -126,6 +129,15 @@ def update_stall_type(stall_type_id):
         
         if 'inclusions' in data:
             stall_type.inclusions = data['inclusions']
+        
+        if 'dinner_passes' in data:
+            stall_type.dinner_passes = int(data['dinner_passes'])
+        
+        if 'max_additional_seller_passes' in data:
+            stall_type.max_additional_seller_passes = int(data['max_additional_seller_passes'])
+        
+        if 'price_per_additional_pass' in data:
+            stall_type.price_per_additional_pass = int(data['price_per_additional_pass'])
         
         db.session.commit()
         

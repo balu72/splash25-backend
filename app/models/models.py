@@ -103,6 +103,9 @@ class StallType(db.Model):
     saleable = db.Column(db.Boolean, default=True)
     inclusions = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    dinner_passes = db.Column(db.Integer, default=1)
+    max_additional_seller_passes = db.Column(db.Integer, default=1)
+    price_per_additional_pass = db.Column(db.Integer, default=3500)
     
     def to_dict(self):
         return {
@@ -115,6 +118,9 @@ class StallType(db.Model):
             'min_meetings_per_attendee': self.min_meetings_per_attendee,
             'inclusions': self.inclusions,
             'saleable': self.saleable,
+            'dinner_passes': self.dinner_passes,
+            'max_additional_seller_passes': self.max_additional_seller_passes,
+            'price_per_additional_pass': self.price_per_additional_pass,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

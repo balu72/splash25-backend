@@ -57,8 +57,7 @@ def create_stall():
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['number', 'stall_type', 'price', 'size', 'attendees', 
-                          'max_meetings_per_attendee', 'min_meetings_per_attendee']
+        required_fields = ['stall_type_id']
         
         for field in required_fields:
             if field not in data:
@@ -66,10 +65,13 @@ def create_stall():
                     'error': f'Missing required field: {field}'
                 }), 400
         
+        # Set default number if not provided
+        stall_number = data.get('number', '0')
+        
         # Check if stall number already exists for this seller
         existing_stall = Stall.query.filter_by(
             seller_id=current_user_id, 
-            number=data['number']
+            number=stall_number
         ).first()
         
         if existing_stall:
@@ -77,18 +79,22 @@ def create_stall():
                 'error': 'Stall number already exists for this seller'
             }), 400
         
+        # Verify stall type exists
+        from ..models import StallType
+        stall_type = StallType.query.get(data['stall_type_id'])
+        if not stall_type:
+            return jsonify({
+                'error': 'Invalid stall type ID'
+            }), 400
+        
         # Create new stall
         new_stall = Stall(
             seller_id=current_user_id,
-            stall_type_id=1,  # Default stall type ID, can be updated later
-            number=data['number'],
-            stall_type=data['stall_type'],
-            price=float(data['price']),
-            size=data['size'],
-            allowed_attendees=int(data['attendees']),  # Map to legacy field for backward compatibility
-            max_meetings_per_attendee=int(data['max_meetings_per_attendee']),
-            min_meetings_per_attendee=int(data['min_meetings_per_attendee']),
-            inclusions=data.get('inclusions', '')
+            stall_type_id=data['stall_type_id'],
+            number=stall_number,
+            fascia_name=data.get('fascia_name', ''),
+            allocated_stall_number=data.get('allocated_stall_number', ''),
+            is_allocated=True
         )
         
         db.session.add(new_stall)
@@ -162,26 +168,24 @@ def update_stall(stall_id):
             
             stall.number = data['number']
         
-        if 'stall_type' in data:
-            stall.stall_type = data['stall_type']
+        if 'stall_type_id' in data:
+            # Verify stall type exists
+            from ..models import StallType
+            stall_type = StallType.query.get(data['stall_type_id'])
+            if not stall_type:
+                return jsonify({
+                    'error': 'Invalid stall type ID'
+                }), 400
+            stall.stall_type_id = data['stall_type_id']
         
-        if 'price' in data:
-            stall.price = float(data['price'])
+        if 'fascia_name' in data:
+            stall.fascia_name = data['fascia_name']
         
-        if 'size' in data:
-            stall.size = data['size']
+        if 'allocated_stall_number' in data:
+            stall.allocated_stall_number = data['allocated_stall_number']
         
-        if 'attendees' in data:
-            stall.allowed_attendees = int(data['attendees'])  # Map to legacy field for backward compatibility
-        
-        if 'max_meetings_per_attendee' in data:
-            stall.max_meetings_per_attendee = int(data['max_meetings_per_attendee'])
-        
-        if 'min_meetings_per_attendee' in data:
-            stall.min_meetings_per_attendee = int(data['min_meetings_per_attendee'])
-        
-        if 'inclusions' in data:
-            stall.inclusions = data['inclusions']
+        if 'is_allocated' in data:
+            stall.is_allocated = bool(data['is_allocated'])
         
         db.session.commit()
         

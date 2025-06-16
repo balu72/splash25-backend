@@ -1278,3 +1278,161 @@ def get_buyer_category(category_id):
         return jsonify({
             'error': f'Failed to fetch buyer category: {str(e)}'
         }), 500
+
+# Stall Allocation Management Endpoints
+
+@admin.route('/sellers/<int:seller_id>/allocate-stall', methods=['POST'])
+@admin_required
+def allocate_stall_to_seller(seller_id):
+    """
+    Allocate a stall type to a seller (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    if 'stall_type_id' not in data:
+        return jsonify({'error': 'Missing required field: stall_type_id'}), 400
+    
+    try:
+        # Find the seller
+        seller = User.query.get(seller_id)
+        if not seller or not seller.is_seller():
+            return jsonify({'error': 'Seller not found'}), 404
+        
+        # Verify stall type exists
+        from ..models import StallType, Stall
+        stall_type = StallType.query.get(data['stall_type_id'])
+        if not stall_type:
+            return jsonify({'error': 'Invalid stall type ID'}), 400
+        
+        # Set default values
+        stall_number = data.get('number', '0')
+        fascia_name = data.get('fascia_name', '')
+        
+        # Use seller's business name as default fascia name if not provided
+        if not fascia_name and seller.seller_profile:
+            fascia_name = seller.seller_profile.business_name
+        
+        # Check if stall number already exists for this seller (if not using default '0')
+        if stall_number != '0':
+            existing_stall = Stall.query.filter_by(
+                seller_id=seller_id, 
+                number=stall_number
+            ).first()
+            
+            if existing_stall:
+                return jsonify({
+                    'error': 'Stall number already exists for this seller'
+                }), 400
+        
+        # Create new stall allocation
+        new_stall = Stall(
+            seller_id=seller_id,
+            stall_type_id=data['stall_type_id'],
+            number=stall_number,
+            fascia_name=fascia_name,
+            allocated_stall_number=data.get('allocated_stall_number', ''),
+            is_allocated=True
+        )
+        
+        db.session.add(new_stall)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Stall allocated successfully',
+            'stall': new_stall.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to allocate stall: {str(e)}'}), 500
+
+@admin.route('/sellers/<int:seller_id>/stalls', methods=['GET'])
+@admin_required
+def get_seller_stalls(seller_id):
+    """
+    Get all stalls allocated to a specific seller (admin only)
+    """
+    try:
+        # Find the seller
+        seller = User.query.get(seller_id)
+        if not seller or not seller.is_seller():
+            return jsonify({'error': 'Seller not found'}), 404
+        
+        # Get all stalls for this seller
+        from ..models import Stall
+        stalls = Stall.query.filter_by(seller_id=seller_id).all()
+        
+        return jsonify({
+            'seller_id': seller_id,
+            'seller_name': seller.seller_profile.business_name if seller.seller_profile else seller.username,
+            'stalls': [stall.to_dict() for stall in stalls]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch seller stalls: {str(e)}'}), 500
+
+@admin.route('/stalls/<int:stall_id>/deallocate', methods=['DELETE'])
+@admin_required
+def deallocate_stall(stall_id):
+    """
+    Deallocate a stall from a seller (admin only)
+    """
+    try:
+        # Find the stall
+        from ..models import Stall
+        stall = Stall.query.get(stall_id)
+        if not stall:
+            return jsonify({'error': 'Stall not found'}), 404
+        
+        # Store seller info for response
+        seller_id = stall.seller_id
+        seller_name = stall.seller.seller_profile.business_name if stall.seller and stall.seller.seller_profile else 'Unknown'
+        
+        # Delete the stall allocation
+        db.session.delete(stall)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Stall deallocated successfully from {seller_name}',
+            'seller_id': seller_id
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to deallocate stall: {str(e)}'}), 500
+
+@admin.route('/stalls', methods=['GET'])
+@admin_required
+def get_all_stalls():
+    """
+    Get all stall allocations (admin only)
+    """
+    try:
+        from ..models import Stall
+        stalls = Stall.query.all()
+        
+        stalls_data = []
+        for stall in stalls:
+            stall_dict = stall.to_dict()
+            # Add seller information
+            if stall.seller and stall.seller.seller_profile:
+                stall_dict['seller_info'] = {
+                    'id': stall.seller.id,
+                    'business_name': stall.seller.seller_profile.business_name,
+                    'contact_email': stall.seller.seller_profile.contact_email,
+                    'is_verified': stall.seller.seller_profile.is_verified
+                }
+            stalls_data.append(stall_dict)
+        
+        return jsonify({
+            'stalls': stalls_data,
+            'total_count': len(stalls_data)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch stalls: {str(e)}'}), 500

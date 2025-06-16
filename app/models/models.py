@@ -337,17 +337,9 @@ class Stall(db.Model):
     # Enhanced fields
     allocated_stall_number = db.Column(db.String(20), nullable=True)
     fascia_name = db.Column(db.String(100), nullable=True)
-    microsite_url = db.Column(db.String(255), nullable=True)
     is_allocated = db.Column(db.Boolean, default=False)
     
-    # Backward compatibility fields
-    stall_type = db.Column(db.String(50), nullable=True)
-    price = db.Column(db.Float, nullable=True)
-    size = db.Column(db.String(50), nullable=True)
-    allowed_attendees = db.Column(db.Integer, nullable=True)
-    max_meetings_per_attendee = db.Column(db.Integer, nullable=True)
-    min_meetings_per_attendee = db.Column(db.Integer, nullable=True)
-    inclusions = db.Column(db.Text, nullable=True)
+    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
@@ -359,19 +351,18 @@ class Stall(db.Model):
         return {
             'id': self.id,
             'seller_id': self.seller_id,
+            'stall_type_id': self.stall_type_id,
             'number': self.number,
             'allocated_stall_number': self.allocated_stall_number,
             'fascia_name': self.fascia_name,
-            'microsite_url': self.microsite_url,
             'is_allocated': self.is_allocated,
-            'stall_type': self.stall_type,
             'stall_type_info': self.stall_type_rel.to_dict() if self.stall_type_rel else None,
-            'price': self.price or (float(self.stall_type_rel.price) if self.stall_type_rel else None),
-            'size': self.size or (self.stall_type_rel.size if self.stall_type_rel else None),
-            'allowed_attendees': self.allowed_attendees or (self.stall_type_rel.attendees if self.stall_type_rel else None),
-            'max_meetings_per_attendee': self.max_meetings_per_attendee or (self.stall_type_rel.max_meetings_per_attendee if self.stall_type_rel else None),
-            'min_meetings_per_attendee': self.min_meetings_per_attendee or (self.stall_type_rel.min_meetings_per_attendee if self.stall_type_rel else None),
-            'inclusions': self.inclusions or (self.stall_type_rel.inclusions if self.stall_type_rel else None),
+            'price': float(self.stall_type_rel.price) if self.stall_type_rel and self.stall_type_rel.price else None,
+            'size': self.stall_type_rel.size if self.stall_type_rel else None,
+            'attendees': self.stall_type_rel.attendees if self.stall_type_rel else None,
+            'max_meetings_per_attendee': self.stall_type_rel.max_meetings_per_attendee if self.stall_type_rel else None,
+            'min_meetings_per_attendee': self.stall_type_rel.min_meetings_per_attendee if self.stall_type_rel else None,
+            'inclusions': self.stall_type_rel.inclusions if self.stall_type_rel else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'seller_business_name': self.seller.seller_profile.business_name if self.seller and self.seller.seller_profile else None

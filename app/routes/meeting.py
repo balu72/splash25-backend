@@ -93,7 +93,13 @@ def create_buyer_meeting_request():
             'error': 'Meeting requests are currently disabled'
         }), 400
     
-    seller_id = data['requested_id']
+    # ✅ FIX: Convert requested_id to integer to fix data type mismatch
+    try:
+        seller_id = int(data['requested_id'])
+    except (ValueError, TypeError):
+        return jsonify({
+            'error': 'Invalid seller ID format'
+        }), 400
     
     # Check if the seller exists
     seller = User.query.get(seller_id)
@@ -120,11 +126,23 @@ def create_buyer_meeting_request():
             'error': 'Time slot does not belong to the specified seller'
         }), 400
     """
+    # Check for existing meeting
     meeting = Meeting.query.filter_by(buyer_id=buyer_id, seller_id=seller_id).first()
     if meeting:
-        return jsonify({
-            'error': 'Meeting request already exists'
-        }), 400
+        # ✅ ENHANCEMENT: Check if existing meeting status allows new request
+        # Get status as lowercase string for case-insensitive comparison
+        if hasattr(meeting.status, 'value'):
+            status_lower = meeting.status.value.lower()
+        else:
+            status_lower = str(meeting.status).lower()
+        
+        # Allow new meeting if previous was cancelled or expired
+        if status_lower not in ['cancelled', 'expired']:
+            return jsonify({
+                'error': f'Meeting request already exists with status: {meeting.status.value if hasattr(meeting.status, "value") else meeting.status}'
+            }), 400
+        
+        # If cancelled or expired, we'll create a new meeting (continue with creation)
     
     # Create the meeting
     meeting = Meeting(
@@ -171,20 +189,38 @@ def create_seller_meeting_request():
             'error': 'Meeting requests are currently disabled'
         }), 400
     
-    buyer_id = data['requested_id']
+    # ✅ FIX: Convert requested_id to integer to fix data type mismatch
+    try:
+        buyer_id = int(data['requested_id'])
+    except (ValueError, TypeError):
+        return jsonify({
+            'error': 'Invalid buyer ID format'
+        }), 400
     
-    # Check if the seller exists
+    # Check if the buyer exists
     buyer = User.query.get(buyer_id)
     if not buyer or buyer.role != UserRole.BUYER.value:
         return jsonify({
             'error': 'Invalid buyer'
         }), 400
 
+    # Check for existing meeting
     meeting = Meeting.query.filter_by(buyer_id=buyer_id, seller_id=seller_id).first()
     if meeting:
-        return jsonify({
-            'error': 'Meeting request already exists'
-        }), 400
+        # ✅ ENHANCEMENT: Check if existing meeting status allows new request
+        # Get status as lowercase string for case-insensitive comparison
+        if hasattr(meeting.status, 'value'):
+            status_lower = meeting.status.value.lower()
+        else:
+            status_lower = str(meeting.status).lower()
+        
+        # Allow new meeting if previous was cancelled or expired
+        if status_lower not in ['cancelled', 'expired']:
+            return jsonify({
+                'error': f'Meeting request already exists with status: {meeting.status.value if hasattr(meeting.status, "value") else meeting.status}'
+            }), 400
+        
+        # If cancelled or expired, we'll create a new meeting (continue with creation)
     
     # Create the meeting
     meeting = Meeting(

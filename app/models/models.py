@@ -272,7 +272,7 @@ class SellerProfile(db.Model):
     
     # Address Information
     address = db.Column(db.Text, nullable=True)
-    state = db.Column(db.String(100), nullable=True)  # Note: DB has VARCHAR(100)
+    state = db.Column(db.String(100), nullable=True)
     pincode = db.Column(db.String(10), nullable=True)
     country = db.Column(db.String(50), nullable=True)
     
@@ -280,6 +280,7 @@ class SellerProfile(db.Model):
     logo_url = db.Column(db.String(255), nullable=True)
     website = db.Column(db.String(255), nullable=True)
     instagram = db.Column(db.String(100), nullable=True)
+    microsite_url = db.Column(db.String(500), nullable=True)
     
     # Business Status
     property_type_id = db.Column(db.Integer, db.ForeignKey('property_types.id'), nullable=True)
@@ -288,7 +289,7 @@ class SellerProfile(db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     gst = db.Column(db.String(20), nullable=True)
     
-    # Business Images
+    # Business Images - Using JSONB to match database
     business_images = db.Column(db.JSON, default=list)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -317,6 +318,7 @@ class SellerProfile(db.Model):
             'country': self.country,
             'logo_url': self.logo_url,
             'website': self.website,
+            'microsite_url': self.microsite_url,
             'contact_email': self.contact_email,
             'contact_phone': self.contact_phone,
             'address': self.address,

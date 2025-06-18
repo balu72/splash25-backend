@@ -150,9 +150,12 @@ def upload_seller_images():
         return jsonify({'error': 'Maximum 5 images allowed'}), 400
     
     # Get external storage credentials from environment
-    storage_url = os.getenv('EXTERNAL_STORAGE_URL')
+    storage_url = os.getenv('EXTERNAL_STORAGE_URL')+"index.php"
     storage_user = os.getenv('EXTERNAL_STORAGE_USER')
     storage_password = os.getenv('EXTERNAL_STORAGE_PASSWORD')
+    ocs_url = os.getenv("EXTERNAL_STORAGE_URL")+'ocs/v2.php/apps/files_sharing/api/v1/shares'
+    ocs_headers = {'OCS-APIRequest': 'true',"Accept": "application/json"}
+    ocs_auth = (storage_user, storage_password)  # Use app password or user/pass
     
     if not all([storage_url, storage_user, storage_password]):
         return jsonify({'error': 'External storage configuration missing'}), 500
@@ -205,18 +208,37 @@ def upload_seller_images():
     
     # Create seller directory path
     seller_dir = f"seller_{user_id}"
-    remote_dir_path = f"{storage_url}/{seller_dir}"
+    #remote_dir_path = f"{storage_url}/{seller_dir}"
+    remote_dir_path = f"/Photos/{seller_dir}"
     try:
         nc.files.listdir(remote_dir_path)
+        logging.debug(f"Found remote path:: {remote_dir_path}")
     except NextcloudException as e:
         if e.status_code != 404:
             raise e
         else:
             try:
+                logging.info(f"Could not locate remote directory::: {remote_dir_path}::: Proceeding to create")
                 nc.files.mkdir(remote_dir_path)
+                logging.debug(f"Created remote directory {remote_dir_path} successfully")
+                logging.debug("Now setting sharing permissions...")
+                seller_dir_sharing_data = {
+                    'path': remote_dir_path,         # Folder you created
+                    'shareType': 3,                  # Public link
+                    'permissions': 1                 # Read-only
+                }
+                response = requests.post(ocs_url, headers=ocs_headers, data=seller_dir_sharing_data, auth=ocs_auth)
+
+                if response.status_code == 200:
+                    logging.info(f"Response Text is:: {response}")
+                    share_info = response.json()
+                    link = share_info['ocs']['data']['url']
+                    logging.debug(f"Public Share URL: {link}")
+                else:
+                    logging.debug("Failed to create share:", response.text)
             except Exception as e:
-                logging.debug("Exception while creating seller directory:{e}")
-                return jsonify({'Exception': 'Failed to create seller directory'}), 500
+                logging.debug(f"Exception while creating seller directory:{str(e)}")
+                return jsonify({"Exception": f"Failed to create seller directory -- {remote_dir_path} - the error is ::::{str(e)}"}), 500
 
     for file in valid_files:
         try:
@@ -224,7 +246,7 @@ def upload_seller_images():
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
             unique_id = str(uuid.uuid4())[:8]
             secure_name = secure_filename(file.filename)
-            filename = f"{timestamp}_{unique_id}_{secure_name}"
+            filename = f"{timestamp}{unique_id}{secure_name}"
             
             # Prepare file data for upload
             file_data = file.read()
@@ -234,10 +256,9 @@ def upload_seller_images():
             auth_string = f"{storage_user}:{storage_password}"
             auth_bytes = auth_string.encode('ascii')
             auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
-        
             
             # Upload to external storage
-            upload_url = f"{storage_url}/{seller_dir}/{filename}"
+            upload_url = f"{remote_dir_path}/{filename}"
             """
             headers = {
                 'Authorization': f'Basic {auth_b64}',
@@ -246,25 +267,44 @@ def upload_seller_images():
             """
             # Upload file
             try:
-               # with open(file_data, 'rb') as f:
-                  #  nc.files.upload_stream(upload_url, f)
-                buf = BytesIO()
-                Image.save(buf)
+                #with open(file, 'rb') as f:
+                    #nc.files.upload_stream(upload_url, f)
+                buf = BytesIO(file_data)  
                 buf.seek(0)
-                nc.files.upload_stream(upload_url, buf)
-                
+                logging.info(f"Uploading file :::: {upload_url}")
+                uploaded_file = nc.files.upload_stream(upload_url, buf)
+                logging.info(f"The uploaded file data is::: {(uploaded_file.name)}")
+                # Now give it a publicly available link 
+                seller_file_sharing_data = {
+                    'path': upload_url,              # Uploaded file
+                    'shareType': 3,                  # Public link
+                    'permissions': 1                 # Read-only
+                }
+                response = requests.post(ocs_url, headers=ocs_headers, data=seller_file_sharing_data, auth=ocs_auth)
+                file_public_url=""
+                if response.status_code == 200:
+                    result = response.json()
+                    if result["ocs"]["meta"]["status"] == "ok":
+                        file_public_url = result["ocs"]["data"]["url"]
+                        logging.debug(f"Public share URL: {file_public_url}")
+                    else:
+                        logging.error(f"Share API error: {result['ocs']['meta']['message']}")
+                else:
+                    print("HTTP error:", response.status_code, response.text)
                 image_record = {
                     'id': str(uuid.uuid4()),
                     'filename': file.filename,
-                    'url': upload_url,
+                    'url': file_public_url+"/download",
                     'size': len(file_data),
                     'uploaded_at': datetime.utcnow().isoformat(),
                     'mime_type': file.content_type or 'image/jpeg'
                 }
                 uploaded_images.append(image_record)
+
             except Exception as e:
-                logging.debug("Exception while uploading file:{e}")
-                return jsonify({'Exception': 'Failed to upload file'}), 500
+                logging.debug(f"Exception while uploading file:{e}")
+                return jsonify({'Exception': f'Failed to upload file {upload_url}:::{str(e)}'}), 500
+
             
         except Exception as e:
             upload_errors.append(f"Error uploading '{file.filename}': {str(e)}")

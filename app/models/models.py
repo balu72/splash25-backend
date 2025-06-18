@@ -270,8 +270,20 @@ class SellerProfile(db.Model):
     contact_email = db.Column(db.String(100), nullable=True)
     contact_phone = db.Column(db.String(20), nullable=True)
     
+    # Personal Information (added to match database)
+    salutation = db.Column(db.String(10), nullable=True)
+    first_name = db.Column(db.String(50), nullable=True)
+    last_name = db.Column(db.String(50), nullable=True)
+    designation = db.Column(db.String(100), nullable=True)
+    company_name = db.Column(db.String(100), nullable=True)
+    mobile = db.Column(db.String(15), nullable=True)
+    
+    # Business Information
+    start_year = db.Column(db.Integer, nullable=True)
+    
     # Address Information
     address = db.Column(db.Text, nullable=True)
+    city = db.Column(db.String(50), nullable=True)
     state = db.Column(db.String(100), nullable=True)
     pincode = db.Column(db.String(10), nullable=True)
     country = db.Column(db.String(50), nullable=True)
@@ -316,14 +328,24 @@ class SellerProfile(db.Model):
             'pincode': self.pincode,
             'state': self.state,
             'country': self.country,
+            'city': self.city,
             'logo_url': self.logo_url,
             'website': self.website,
+            'instagram': self.instagram,
             'microsite_url': self.microsite_url,
             'contact_email': self.contact_email,
             'contact_phone': self.contact_phone,
+            'mobile': self.mobile,
             'address': self.address,
             'is_verified': self.is_verified,
             'business_images': self.business_images or [],
+            # Personal Information
+            'salutation': self.salutation,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'designation': self.designation,
+            'company_name': self.company_name,
+            'start_year': self.start_year,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'target_market_relationships': [interest.to_dict() for interest in self.target_market_relationships]

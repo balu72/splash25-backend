@@ -601,7 +601,7 @@ def get_seller_by_microsite(microsite_path):
                 'error': 'User is not a seller'
             }), 400
         
-        # Return only the specified subset of fields
+        # Return only the specified subset of fields - now all fields exist in the database
         seller_data = {
             'user_id': seller_profile.user_id,
             'company_name': seller_profile.company_name,
@@ -612,7 +612,7 @@ def get_seller_by_microsite(microsite_path):
             'logo_url': seller_profile.logo_url,
             'website': seller_profile.website,
             'instagram': seller_profile.instagram,
-            'business_images': seller_profile.business_images,
+            'business_images': seller_profile.business_images or [],
             'owner_salutation': seller_profile.salutation,
             'owner_first_name': seller_profile.first_name,
             'owner_last_name': seller_profile.last_name,

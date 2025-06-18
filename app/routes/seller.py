@@ -3,9 +3,19 @@ from io import BytesIO
 from PIL import Image
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from urllib.parse import urlparse
 
 import logging
-from ..models import db, User, UserRole, SellerProfile, SellerAttendee, SellerBusinessInfo, SellerFinancialInfo, SellerReferences, PropertyType, Interest
+import os
+from ..models import (
+    db, User, UserRole, SellerProfile, SellerAttendee, SellerBusinessInfo, 
+    SellerFinancialInfo, SellerReferences, PropertyType, Interest, BuyerCategory,
+    StallType, Meeting, TimeSlot, TravelPlan, Transportation, Accommodation,
+    GroundTransportation, Listing, ListingDate, InvitedBuyer, PendingBuyer,
+    DomainRestriction, BuyerProfile, BuyerBusinessInfo, BuyerFinancialInfo,
+    BuyerReferences, Stall, StallInventory, MigrationLog, MigrationMappingBuyers,
+    MigrationMappingSellers, SystemSetting
+)
 from ..utils.auth import seller_required, admin_required
 
 seller = Blueprint('seller', __name__, url_prefix='/api/sellers')
@@ -88,6 +98,7 @@ def get_own_profile():
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+
         # Create new profile with pre-populated data from users table
         seller_profile = SellerProfile(
             user_id=user_id,
@@ -98,6 +109,10 @@ def get_own_profile():
             is_verified=False
         )
         
+        # Generate and save a microsite URL for the new profile
+        microsite_url = _generate_microsite_url_for_profile(seller_profile)
+        seller_profile.microsite_url = microsite_url
+
         try:
             db.session.add(seller_profile)
             db.session.commit()
@@ -111,6 +126,65 @@ def get_own_profile():
     return jsonify({
         'seller': seller_profile.to_dict()
     }), 200
+
+# helper function for creating a URL
+def _generate_microsite_url_for_profile(seller_profile):
+    """Helper function to generate a microsite URL for a seller profile
+    
+    Args:
+        seller_profile: The SellerProfile object
+        
+    Returns:
+        str: The generated microsite URL
+    """
+    import uuid
+    from urllib.parse import quote
+    import os
+    
+    
+    # Combine to create a unique, readable URL
+   # base_url = os.getenv('PUBLIC_SITE_URL', 'https://splash25.com')
+    microsite_url = f"/seller/{seller_profile.user_id}"
+        
+    return microsite_url
+
+@seller.route('/profile/generate-microsite', methods=['POST'])
+@jwt_required()
+@seller_required
+def generate_microsite_url():
+    """Generate and save a microsite URL for the current seller's profile"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Generate microsite URL using helper function
+    microsite_url = _generate_microsite_url_for_profile(seller_profile)
+    
+    # Save to profile
+    seller_profile.microsite_url = microsite_url
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': 'Microsite URL generated successfully',
+            'seller': seller_profile.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to generate microsite URL',
+            'message': str(e)
+        }), 500
+
 
 @seller.route('/profile/images', methods=['POST'])
 @jwt_required()
@@ -497,4 +571,59 @@ def get_interests():
     except Exception as e:
         return jsonify({
             'error': f'Failed to fetch interests: {str(e)}'
+        }), 500
+    
+
+@seller.route('/public/<path:microsite_path>', methods=['GET'])
+def get_seller_by_microsite(microsite_path):
+    """Get a seller profile by its microsite URL path (public, no auth required)"""
+    try:
+        # Construct the full microsite URL
+        #url = "http://splash25.org/seller/pqrs"
+       # parsed_url = urlparse(url)
+        #path = parsed_url.path
+       # base_url = os.getenv('PUBLIC_SITE_URL', 'https://splash25.com')
+        full_microsite_url = f"/seller/{microsite_path}"
+        logging.info(f"microsite path: {microsite_path}, full_microsite_url: {full_microsite_url}")
+        
+        # Find the seller profile by microsite URL
+        seller_profile = SellerProfile.query.filter_by(microsite_url=full_microsite_url).first()
+        
+        if not seller_profile:
+            return jsonify({
+                'error': 'Seller profile not found'
+            }), 404
+        
+        # Check if the associated user is actually a seller
+        user = User.query.get(seller_profile.user_id)
+        if not user or user.role != 'seller':
+            return jsonify({
+                'error': 'User is not a seller'
+            }), 400
+        
+        # Return only the specified subset of fields
+        seller_data = {
+            'user_id': seller_profile.user_id,
+            'company_name': seller_profile.company_name,
+            'business_name': seller_profile.business_name,
+            'description': seller_profile.description,
+            'seller_type': seller_profile.seller_type,
+            'target_market': seller_profile.target_market,
+            'logo_url': seller_profile.logo_url,
+            'website': seller_profile.website,
+            'instagram': seller_profile.instagram,
+            'business_images': seller_profile.business_images,
+            'owner_salutation': seller_profile.salutation,
+            'owner_first_name': seller_profile.first_name,
+            'owner_last_name': seller_profile.last_name,
+            'owner_designation': seller_profile.designation,
+            'start_year': seller_profile.start_year
+        }
+        
+        return jsonify({
+            'seller': seller_data
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch seller profile: {str(e)}'
         }), 500

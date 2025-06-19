@@ -952,6 +952,7 @@ def get_sellers():
     """
     Endpoint to get list of sellers with proper profile data including state and country
     """
+    import os
     from ..models.models import SellerProfile
     
     # Get query parameters for filtering
@@ -974,9 +975,17 @@ def get_sellers():
     # Execute query
     results = query.all()
     
+    # Get PUBLIC_SITE_URL from environment
+    public_site_url = os.getenv('PUBLIC_SITE_URL', 'http://localhost:3000')
+    
     # Convert to response format
     seller_list = []
     for user, profile in results:
+        # Handle microsite_url - prepend PUBLIC_SITE_URL if it's a relative path
+        microsite_url = profile.microsite_url or ''
+        if microsite_url and not microsite_url.startswith('http'):
+            microsite_url = f"{public_site_url}{microsite_url}"
+        
         seller_data = {
             'id': user.id,
             'name': user.username,
@@ -993,7 +1002,7 @@ def get_sellers():
             'isVerified': profile.is_verified,
             'stallNo': f"A{user.id:02d}",  # Placeholder
             'website': profile.website or '',
-            #'microsite': profile.microsite or '',
+            'microsite_url': microsite_url,
             'contactEmail': profile.contact_email or user.email,
             'contactPhone': profile.contact_phone or ''
         }

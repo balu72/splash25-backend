@@ -72,6 +72,20 @@ def get_seller(seller_id):
             'error': 'User is not a seller'
         }), 400
     
+    # Ensure microsite URL has full domain prefix if needed (for response only)
+    if (seller_profile.microsite_url and 
+        not seller_profile.microsite_url.startswith(('http://', 'https://'))):
+        
+        public_site_url = os.getenv('PUBLIC_SITE_URL', '')
+        if public_site_url:
+            # Handle URL concatenation properly
+            if public_site_url.endswith('/') and seller_profile.microsite_url.startswith('/'):
+                seller_profile.microsite_url = public_site_url + seller_profile.microsite_url[1:]
+            elif not public_site_url.endswith('/') and not seller_profile.microsite_url.startswith('/'):
+                seller_profile.microsite_url = public_site_url + '/' + seller_profile.microsite_url
+            else:
+                seller_profile.microsite_url = public_site_url + seller_profile.microsite_url
+    
     return jsonify({
         'seller': seller_profile.to_dict()
     }), 200
@@ -91,7 +105,7 @@ def get_own_profile():
     
     # Find the seller profile
     seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
-    
+
     if not seller_profile:
         # Auto-create profile for new sellers with data from users table
         user = User.query.get(user_id)
@@ -122,6 +136,20 @@ def get_own_profile():
                 'error': 'Failed to create seller profile',
                 'message': str(e)
             }), 500
+    
+    # Ensure microsite URL has full domain prefix if needed (for response only)
+    if (seller_profile.microsite_url and 
+        not seller_profile.microsite_url.startswith(('http://', 'https://'))):
+        
+        public_site_url = os.getenv('PUBLIC_SITE_URL', '')
+        if public_site_url:
+            # Handle URL concatenation properly
+            if public_site_url.endswith('/') and seller_profile.microsite_url.startswith('/'):
+                seller_profile.microsite_url = public_site_url + seller_profile.microsite_url[1:]
+            elif not public_site_url.endswith('/') and not seller_profile.microsite_url.startswith('/'):
+                seller_profile.microsite_url = public_site_url + '/' + seller_profile.microsite_url
+            else:
+                seller_profile.microsite_url = public_site_url + seller_profile.microsite_url
     
     return jsonify({
         'seller': seller_profile.to_dict()

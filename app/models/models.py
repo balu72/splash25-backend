@@ -76,6 +76,30 @@ class PropertyType(db.Model):
             'description': self.description
         }
 
+class HostProperty(db.Model):
+    __tablename__ = 'host_properties'
+    
+    property_id = db.Column(db.Integer, primary_key=True)
+    property_name = db.Column(db.String(100), nullable=False)
+    rooms_allotted = db.Column(db.Integer, nullable=False)
+    contact_person_name = db.Column(db.String(100), nullable=True)
+    contact_phone = db.Column(db.String(50), nullable=True)
+    contact_email = db.Column(db.String(100), nullable=True)
+    property_address = db.Column(db.String(200), nullable=True)
+    number_current_guests = db.Column(db.Integer, nullable=True)
+    
+    def to_dict(self):
+        return {
+            'property_id': self.property_id,
+            'property_name': self.property_name,
+            'rooms_allotted': self.rooms_allotted,
+            'contact_person_name': self.contact_person_name,
+            'contact_phone': self.contact_phone,
+            'contact_email': self.contact_email,
+            'property_address': self.property_address,
+            'number_current_guests': self.number_current_guests
+        }
+
 class Interest(db.Model):
     __tablename__ = 'interests'
     
@@ -263,8 +287,8 @@ class SellerProfile(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     business_name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    seller_type = db.Column(db.String(50), nullable=True)
-    target_market = db.Column(db.String(50), nullable=True)
+    seller_type = db.Column(db.String(200), nullable=True)
+    target_market = db.Column(db.String(200), nullable=True)
     
     # Contact Information
     contact_email = db.Column(db.String(100), nullable=True)
@@ -847,10 +871,10 @@ class SellerBusinessInfo(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     seller_profile_id = db.Column(db.Integer, db.ForeignKey('seller_profiles.id'))
-    start_year = db.Column(db.Integer)
+    start_year = db.Column(db.BigInteger)
     number_of_rooms = db.Column(db.Integer)
     previous_business = db.Column(db.Boolean, default=False)
-    previous_business_year = db.Column(db.Integer)
+    previous_business_year = db.Column(db.BigInteger)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships

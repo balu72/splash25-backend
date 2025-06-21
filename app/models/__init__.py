@@ -4,7 +4,7 @@ from .models import (
     TravelPlan, Transportation, Accommodation, GroundTransportation,
     Meeting, Listing, ListingDate, User, InvitedBuyer, PendingBuyer, DomainRestriction,
     SellerProfile, BuyerProfile, SystemSetting, TimeSlot, Stall,
-    BuyerCategory, PropertyType, Interest, StallType, StallInventory,
+    BuyerCategory, PropertyType, Interest, StallType, StallInventory, HostProperty,
     SellerAttendee, SellerBusinessInfo, SellerFinancialInfo, SellerReferences,
     BuyerBusinessInfo, BuyerFinancialInfo, BuyerReferences,
     MigrationLog, MigrationMappingBuyers, MigrationMappingSellers
@@ -16,7 +16,7 @@ __all__ = [
     'TravelPlan', 'Transportation', 'Accommodation', 'GroundTransportation',
     'Meeting', 'Listing', 'ListingDate', 'User', 'InvitedBuyer', 'PendingBuyer', 'DomainRestriction',
     'SellerProfile', 'BuyerProfile', 'SystemSetting', 'TimeSlot', 'Stall',
-    'BuyerCategory', 'PropertyType', 'Interest', 'StallType', 'StallInventory',
+    'BuyerCategory', 'PropertyType', 'Interest', 'StallType', 'StallInventory', 'HostProperty',
     'SellerAttendee', 'SellerBusinessInfo', 'SellerFinancialInfo', 'SellerReferences',
     'BuyerBusinessInfo', 'BuyerFinancialInfo', 'BuyerReferences',
     'MigrationLog', 'MigrationMappingBuyers', 'MigrationMappingSellers'

@@ -613,25 +613,44 @@ class Accommodation(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     travel_plan_id = db.Column(db.Integer, db.ForeignKey('travel_plans.id'), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
-    address = db.Column(db.Text, nullable=False)
     check_in_datetime = db.Column(db.DateTime, nullable=False)
     check_out_datetime = db.Column(db.DateTime, nullable=False)
     room_type = db.Column(db.String(100), nullable=False)
     booking_reference = db.Column(db.String(50), nullable=False)
     special_notes = db.Column(db.Text, nullable=True)
     
+    # New fields added to match database changes
+    host_property_id = db.Column(db.Integer, db.ForeignKey('host_properties.property_id'), nullable=False)
+    buyer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    host_property = db.relationship('HostProperty', backref=db.backref('accommodations', lazy=True))
+    buyer = db.relationship('User', backref=db.backref('accommodations', lazy=True))
+    
     def to_dict(self):
         return {
             'id': self.id,
             'travel_plan_id': self.travel_plan_id,
-            'name': self.name,
-            'address': self.address,
+            'host_property_id': self.host_property_id,
+            'buyer_id': self.buyer_id,
             'check_in_datetime': self.check_in_datetime.isoformat() if self.check_in_datetime else None,
             'check_out_datetime': self.check_out_datetime.isoformat() if self.check_out_datetime else None,
             'room_type': self.room_type,
             'booking_reference': self.booking_reference,
-            'special_notes': self.special_notes
+            'special_notes': self.special_notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # Include related data for convenience
+            'host_property': self.host_property.to_dict() if self.host_property else None,
+            'buyer': {
+                'id': self.buyer.id,
+                'username': self.buyer.username,
+                'email': self.buyer.email,
+                'name': self.buyer.buyer_profile.name if self.buyer and self.buyer.buyer_profile else None,
+                'organization': self.buyer.buyer_profile.organization if self.buyer and self.buyer.buyer_profile else None
+            } if self.buyer else None
         }
 
 class GroundTransportation(db.Model):

@@ -1447,9 +1447,27 @@ def get_host_properties():
     """
     try:
         properties = HostProperty.query.all()
+        
+        # Build properties list with calculated fields
+        properties_data = []
+        for property in properties:
+            property_dict = property.to_dict()
+            
+            # Calculate additional properties
+            number_rooms_allocated = property.number_rooms_allocated or 0
+            number_current_guests = property.number_current_guests or 0
+            
+            # 1. Number of rooms available = rooms_allotted - number_rooms_allocated
+            property_dict['number_rooms_available'] = property.rooms_allotted - number_rooms_allocated
+            
+            # 2. isAvailable = True if number_current_guests < 2*rooms_allotted, else False
+            property_dict['isAvailable'] = number_current_guests < (2 * property.rooms_allotted)
+            
+            properties_data.append(property_dict)
+        
         return jsonify({
-            'host_properties': [property.to_dict() for property in properties],
-            'total_count': len(properties)
+            'host_properties': properties_data,
+            'total_count': len(properties_data)
         }), 200
     except Exception as e:
         return jsonify({
@@ -1697,13 +1715,16 @@ def allocate_accommodation_to_buyer(buyer_id):
     try:
         # Find the buyer
         buyer = User.query.get(buyer_id)
-        if not buyer or not buyer.is_buyer():
-            return jsonify({'error': 'Buyer not found or user is not a buyer'}), 404
+        if not buyer:
+            return jsonify({'error': f'User with ID {buyer_id} not found'}), 404
+        
+        if not buyer.is_buyer():
+            return jsonify({'error': f'User with ID {buyer_id} is not a buyer (role: {buyer.role})'}), 404
         
         # Verify host property exists
         host_property = HostProperty.query.get(data['host_property_id'])
         if not host_property:
-            return jsonify({'error': 'Host property not found'}), 404
+            return jsonify({'error': f'Host property with ID {data["host_property_id"]} not found'}), 404
         
         # Validate room type
         valid_room_types = ['single', 'shared']
@@ -1723,12 +1744,45 @@ def allocate_accommodation_to_buyer(buyer_id):
         except (ValueError, AttributeError) as e:
             return jsonify({'error': f'Invalid datetime format. Use ISO format (e.g., 2025-06-25T15:00:00Z): {str(e)}'}), 400
         
-        # Find the first available travel plan for this buyer
+        # Find the first available travel plan for this buyer, or create a default one
         travel_plan = TravelPlan.query.filter_by(user_id=buyer_id).order_by(TravelPlan.created_at.asc()).first()
+        
         if not travel_plan:
-            return jsonify({
-                'error': 'No travel plan found for this buyer. Please create a travel plan first.'
-            }), 404
+            # Helper function to get system setting
+            def get_system_setting(key, default_value=None):
+                from ..models import SystemSetting
+                setting = SystemSetting.query.filter_by(key=key).first()
+                return setting.value if setting and setting.value else default_value
+            
+            # Helper function to parse date from setting
+            def parse_date_from_setting(key, fallback_date):
+                date_str = get_system_setting(key)
+                if date_str:
+                    try:
+                        return datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                return fallback_date
+            
+            # Get dynamic event configuration from system settings
+            from datetime import date
+            event_start_date = parse_date_from_setting('event_start_date', date(2025, 6, 25))
+            event_end_date = parse_date_from_setting('event_end_date', date(2025, 6, 28))
+            event_name = get_system_setting('event_name', 'Splash25 Event')
+            event_venue = get_system_setting('event_venue', 'Wayanad, Kerala')
+            
+            # Create a default travel plan using system settings
+            travel_plan = TravelPlan(
+                user_id=buyer_id,
+                event_name=event_name,
+                event_start_date=event_start_date,
+                event_end_date=event_end_date,
+                venue=event_venue,
+                status="active",
+                created_at=datetime.utcnow()
+            )
+            db.session.add(travel_plan)
+            db.session.flush()  # Get the ID without committing yet
         
         # Check if buyer already has accommodation for this travel plan
         existing_accommodation = Accommodation.query.filter_by(
@@ -1758,6 +1812,42 @@ def allocate_accommodation_to_buyer(buyer_id):
         db.session.add(new_accommodation)
         db.session.commit()
         
+        # Update host property statistics
+        try:
+            # Count accommodations by room type for this property
+            shared_count = Accommodation.query.filter_by(
+                host_property_id=data['host_property_id'],
+                room_type='shared'
+            ).count()
+            
+            single_count = Accommodation.query.filter_by(
+                host_property_id=data['host_property_id'],
+                room_type='single'
+            ).count()
+            
+            # Calculate number_rooms_allocated using new formula
+            # Formula: (shared_count // 2) + single_count
+            host_property.number_rooms_allocated = (shared_count // 2) + single_count
+            
+            # Validation: Check if allocated rooms exceed available rooms
+            if host_property.number_rooms_allocated > host_property.rooms_allotted:
+                db.session.rollback()
+                return jsonify({
+                    'error': 'Cannot allocate room: exceeds available room capacity'
+                }), 400
+            
+            # Update number_current_guests using the specified formula
+            # Formula: (1 * shared_count) + (2 * single_count)
+            host_property.number_current_guests = (1 * shared_count) + (2 * single_count)
+            
+            # Commit the host property updates
+            db.session.commit()
+            
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'error': f'Failed to update host property statistics: {str(e)}'
+            }), 500
         
         # Return success response with accommodation details
         return jsonify({

@@ -18,8 +18,8 @@ def get_buyers():
     state = request.args.get('state', '')
     selling_wayanad = request.args.get('selling_wayanad', '')
     
-    # Start with a query for all buyers
-    query = BuyerProfile.query.join(User).filter(User.role == 'buyer')
+    # Start with a query for all buyers - only include users with buyer role
+    query = BuyerProfile.query.join(User).filter(User.role == UserRole.BUYER.value)
     
     # Apply filters if provided
     if name:

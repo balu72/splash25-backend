@@ -82,6 +82,7 @@ class HostProperty(db.Model):
     property_id = db.Column(db.Integer, primary_key=True)
     property_name = db.Column(db.String(100), nullable=False)
     rooms_allotted = db.Column(db.Integer, nullable=False)
+    number_rooms_allocated = db.Column(db.Integer, default=0)
     contact_person_name = db.Column(db.String(100), nullable=True)
     contact_phone = db.Column(db.String(50), nullable=True)
     contact_email = db.Column(db.String(100), nullable=True)
@@ -93,6 +94,7 @@ class HostProperty(db.Model):
             'property_id': self.property_id,
             'property_name': self.property_name,
             'rooms_allotted': self.rooms_allotted,
+            'number_rooms_allocated': self.number_rooms_allocated,
             'contact_person_name': self.contact_person_name,
             'contact_phone': self.contact_phone,
             'contact_email': self.contact_email,

@@ -1706,7 +1706,7 @@ def allocate_accommodation_to_buyer(buyer_id):
             return jsonify({'error': 'Host property not found'}), 404
         
         # Validate room type
-        valid_room_types = ['single', 'double']
+        valid_room_types = ['single', 'shared']
         if data['room_type'] not in valid_room_types:
             return jsonify({'error': f'Invalid room type. Must be one of: {valid_room_types}'}), 400
         
@@ -1757,6 +1757,7 @@ def allocate_accommodation_to_buyer(buyer_id):
         
         db.session.add(new_accommodation)
         db.session.commit()
+        
         
         # Return success response with accommodation details
         return jsonify({

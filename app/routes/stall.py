@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, Stall, SellerProfile
-from ..utils.auth import seller_required
+from ..utils.auth import seller_required, admin_required
 
 stall = Blueprint('stall', __name__, url_prefix='/api/stalls')
 
@@ -131,33 +131,25 @@ def create_stall():
 
 @stall.route('/<int:stall_id>', methods=['PUT'])
 @jwt_required()
-@seller_required
+@admin_required
 def update_stall(stall_id):
-    """Update an existing stall"""
-    current_user_id = get_jwt_identity()
-    # Convert to int if it's a string
-    if isinstance(current_user_id, str):
-        try:
-            current_user_id = int(current_user_id)
-        except ValueError:
-            return jsonify({'error': 'Invalid user ID'}), 400
-    
+    """Update an existing stall (admin only)"""
     try:
-        # Find the stall and verify ownership
-        stall = Stall.query.filter_by(id=stall_id, seller_id=current_user_id).first()
+        # Find the stall (admin can update any stall)
+        stall = Stall.query.get(stall_id)
         
         if not stall:
             return jsonify({
-                'error': 'Stall not found or access denied'
+                'error': 'Stall not found'
             }), 404
         
         data = request.get_json()
         
         # Update fields if provided
         if 'number' in data:
-            # Check if new number conflicts with existing stalls
+            # Check if new number conflicts with existing stalls for the same seller
             existing_stall = Stall.query.filter_by(
-                seller_id=current_user_id, 
+                seller_id=stall.seller_id, 
                 number=data['number']
             ).filter(Stall.id != stall_id).first()
             

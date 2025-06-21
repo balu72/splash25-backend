@@ -468,7 +468,7 @@ def update_pickup(plan_id):
         # Update existing ground transportation record
         travel_plan.ground_transportation.pickup_location = data['location']
         travel_plan.ground_transportation.pickup_datetime = datetime.fromisoformat(data['dateTime'])
-        travel_plan.ground_transportation.pickup_vehicle_type = data.get('vehicleType', '')
+        travel_plan.ground_transportation.pickup_vehicle_type = data.get('vehicleTypeId', None)
         travel_plan.ground_transportation.pickup_driver_contact = data.get('driverContact', '')
     
     db.session.commit()
@@ -527,7 +527,7 @@ def update_dropoff(plan_id):
         # Update existing ground transportation record
         travel_plan.ground_transportation.dropoff_location = data['location']
         travel_plan.ground_transportation.dropoff_datetime = datetime.fromisoformat(data['dateTime'])
-        travel_plan.ground_transportation.dropoff_vehicle_type = data.get('vehicleType', '')
+        travel_plan.ground_transportation.dropoff_vehicle_type = data.get('vehicleTypeId', None)
         travel_plan.ground_transportation.dropoff_driver_contact = data.get('driverContact', '')
     
     db.session.commit()

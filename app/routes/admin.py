@@ -2234,12 +2234,12 @@ def delete_transport_type(transport_type_id):
         
         # Check if transport type is being used in ground_transportation
         from ..models import GroundTransportation
-        
+
         # Check pickup_vehicle_type usage
-        pickup_usage = GroundTransportation.query.filter_by(pickup_vehicle_type=transport_type.transport_type).count()
-        
+        pickup_usage = GroundTransportation.query.filter_by(pickup_vehicle_type=transport_type.transport_type_id).count()
+
         # Check dropoff_vehicle_type usage
-        dropoff_usage = GroundTransportation.query.filter_by(dropoff_vehicle_type=transport_type.transport_type).count()
+        dropoff_usage = GroundTransportation.query.filter_by(dropoff_vehicle_type=transport_type.transport_type_id).count()
         
         total_usage = pickup_usage + dropoff_usage
         

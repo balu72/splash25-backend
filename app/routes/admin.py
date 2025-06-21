@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty, TravelPlan, Accommodation
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty, TravelPlan, Accommodation, TransportType
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -1951,3 +1951,314 @@ def get_all_accommodations():
         
     except Exception as e:
         return jsonify({'error': f'Failed to fetch accommodations: {str(e)}'}), 500
+
+# Transport Types Management Endpoints
+
+@admin.route('/transport-types', methods=['GET'])
+@admin_required
+def get_transport_types():
+    """
+    Get all transport types with pagination (admin only)
+    """
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 100:
+            per_page = 20
+        
+        # Query transport types with pagination
+        transport_types_pagination = TransportType.query.order_by(
+            TransportType.capacity.asc(), 
+            TransportType.transport_type.asc()
+        ).paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        return jsonify({
+            'message': 'Transport types retrieved successfully',
+            'transport_types': [transport_type.to_dict() for transport_type in transport_types_pagination.items],
+            'pagination': {
+                'page': transport_types_pagination.page,
+                'pages': transport_types_pagination.pages,
+                'per_page': transport_types_pagination.per_page,
+                'total': transport_types_pagination.total,
+                'has_next': transport_types_pagination.has_next,
+                'has_prev': transport_types_pagination.has_prev
+            },
+            'total_count': transport_types_pagination.total
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch transport types: {str(e)}',
+            'transport_types': [],
+            'pagination': {
+                'page': 1,
+                'pages': 0,
+                'per_page': 20,
+                'total': 0,
+                'has_next': False,
+                'has_prev': False
+            },
+            'total_count': 0
+        }), 500
+
+@admin.route('/transport-types/<int:transport_type_id>', methods=['GET'])
+@admin_required
+def get_transport_type(transport_type_id):
+    """
+    Get specific transport type (admin only)
+    """
+    try:
+        transport_type = TransportType.query.get(transport_type_id)
+        if not transport_type:
+            return jsonify({'error': 'Transport type not found'}), 404
+        
+        return jsonify({
+            'message': f'Transport type {transport_type_id} retrieved successfully',
+            'transport_type': transport_type.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch transport type: {str(e)}'
+        }), 500
+
+@admin.route('/transport-types', methods=['POST'])
+@admin_required
+def create_transport_type():
+    """
+    Create new transport type (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    required_fields = ['transport_type', 'capacity']
+    for field in required_fields:
+        if field not in data or data[field] is None:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Validate transport_type
+    transport_type_name = data['transport_type'].strip()
+    if len(transport_type_name) == 0:
+        return jsonify({'error': 'Transport type cannot be empty'}), 400
+    if len(transport_type_name) > 100:
+        return jsonify({'error': 'Transport type cannot exceed 100 characters'}), 400
+    
+    # Check if transport type already exists
+    existing_transport = TransportType.query.filter_by(transport_type=transport_type_name).first()
+    if existing_transport:
+        return jsonify({'error': 'Transport type already exists'}), 409
+    
+    # Validate capacity
+    try:
+        capacity = int(data['capacity'])
+        if capacity <= 0:
+            return jsonify({'error': 'Capacity must be a positive number'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Capacity must be a valid number'}), 400
+    
+    # Validate optional fields
+    field_limits = {
+        'transport_type_description': 200,
+        'contact_person_name': 100,
+        'contact_person_phone': 50
+    }
+    
+    for field, max_length in field_limits.items():
+        if field in data and data[field] and len(data[field]) > max_length:
+            return jsonify({'error': f'{field} cannot exceed {max_length} characters'}), 400
+    
+    # Validate number_available_vehicles
+    number_available_vehicles = 0
+    if 'number_available_vehicles' in data and data['number_available_vehicles'] is not None:
+        try:
+            number_available_vehicles = int(data['number_available_vehicles'])
+            if number_available_vehicles < 0:
+                return jsonify({'error': 'Number of available vehicles cannot be negative'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Number of available vehicles must be a valid number'}), 400
+    
+    try:
+        # Create new transport type
+        transport_type = TransportType(
+            transport_type=transport_type_name,
+            transport_type_description=data.get('transport_type_description', '').strip() if data.get('transport_type_description') else None,
+            capacity=capacity,
+            contact_person_name=data.get('contact_person_name', '').strip() if data.get('contact_person_name') else None,
+            contact_person_phone=data.get('contact_person_phone', '').strip() if data.get('contact_person_phone') else None,
+            number_available_vehicles=number_available_vehicles
+        )
+        
+        db.session.add(transport_type)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Transport type created successfully',
+            'transport_type': transport_type.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to create transport type: {str(e)}'
+        }), 500
+
+@admin.route('/transport-types/<int:transport_type_id>', methods=['PUT'])
+@admin_required
+def update_transport_type(transport_type_id):
+    """
+    Update transport type (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the transport type
+        transport_type = TransportType.query.get(transport_type_id)
+        if not transport_type:
+            return jsonify({'error': 'Transport type not found'}), 404
+        
+        # Validate transport_type if provided
+        if 'transport_type' in data:
+            transport_type_name = data['transport_type'].strip()
+            if len(transport_type_name) == 0:
+                return jsonify({'error': 'Transport type cannot be empty'}), 400
+            if len(transport_type_name) > 100:
+                return jsonify({'error': 'Transport type cannot exceed 100 characters'}), 400
+            
+            # Check if new name conflicts with existing transport type (excluding current one)
+            existing_transport = TransportType.query.filter(
+                TransportType.transport_type == transport_type_name,
+                TransportType.transport_type_id != transport_type_id
+            ).first()
+            if existing_transport:
+                return jsonify({'error': 'Transport type already exists'}), 409
+        
+        # Validate capacity if provided
+        if 'capacity' in data:
+            try:
+                capacity = int(data['capacity'])
+                if capacity <= 0:
+                    return jsonify({'error': 'Capacity must be a positive number'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Capacity must be a valid number'}), 400
+        
+        # Validate optional field lengths
+        field_limits = {
+            'transport_type_description': 200,
+            'contact_person_name': 100,
+            'contact_person_phone': 50
+        }
+        
+        for field, max_length in field_limits.items():
+            if field in data and data[field] and len(data[field]) > max_length:
+                return jsonify({'error': f'{field} cannot exceed {max_length} characters'}), 400
+        
+        # Validate number_available_vehicles if provided
+        if 'number_available_vehicles' in data and data['number_available_vehicles'] is not None:
+            try:
+                number_available_vehicles = int(data['number_available_vehicles'])
+                if number_available_vehicles < 0:
+                    return jsonify({'error': 'Number of available vehicles cannot be negative'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Number of available vehicles must be a valid number'}), 400
+        
+        # Update transport type fields
+        updatable_fields = [
+            'transport_type', 'transport_type_description', 'capacity',
+            'contact_person_name', 'contact_person_phone', 'number_available_vehicles'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                if field == 'transport_type':
+                    # Handle required string field
+                    setattr(transport_type, field, data[field].strip())
+                elif field in ['capacity', 'number_available_vehicles']:
+                    # Handle integer fields
+                    if data[field] is not None:
+                        setattr(transport_type, field, int(data[field]))
+                    else:
+                        setattr(transport_type, field, 0 if field == 'number_available_vehicles' else None)
+                else:
+                    # Handle optional string fields
+                    if data[field] is not None:
+                        setattr(transport_type, field, data[field].strip() if data[field] else None)
+                    else:
+                        setattr(transport_type, field, None)
+        
+        # Update timestamp
+        transport_type.updated_at = datetime.utcnow()
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Transport type {transport_type_id} updated successfully',
+            'transport_type': transport_type.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update transport type: {str(e)}'}), 500
+
+@admin.route('/transport-types/<int:transport_type_id>', methods=['DELETE'])
+@admin_required
+def delete_transport_type(transport_type_id):
+    """
+    Delete transport type (admin only)
+    """
+    try:
+        # Find the transport type
+        transport_type = TransportType.query.get(transport_type_id)
+        if not transport_type:
+            return jsonify({'error': 'Transport type not found'}), 404
+        
+        # Check if transport type is being used in ground_transportation
+        from ..models import GroundTransportation
+        
+        # Check pickup_vehicle_type usage
+        pickup_usage = GroundTransportation.query.filter_by(pickup_vehicle_type=transport_type.transport_type).count()
+        
+        # Check dropoff_vehicle_type usage
+        dropoff_usage = GroundTransportation.query.filter_by(dropoff_vehicle_type=transport_type.transport_type).count()
+        
+        total_usage = pickup_usage + dropoff_usage
+        
+        if total_usage > 0:
+            return jsonify({
+                'error': f'Cannot delete transport type. It is currently being used in {total_usage} transportation record(s).'
+            }), 400
+        
+        # Store transport type name for response
+        transport_type_name = transport_type.transport_type
+        
+        # Delete the transport type
+        db.session.delete(transport_type)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Transport type "{transport_type_name}" deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete transport type: {str(e)}'}), 500

@@ -2262,3 +2262,295 @@ def delete_transport_type(transport_type_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to delete transport type: {str(e)}'}), 500
+
+# Ground Transportation Management Endpoints
+
+@admin.route('/buyers/<int:buyer_id>/allocate-transportation', methods=['POST'])
+@admin_required
+def allocate_transportation_to_buyer(buyer_id):
+    """
+    Allocate ground transportation to a buyer (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    required_fields = ['pickup_location', 'pickup_datetime', 'dropoff_location', 'dropoff_datetime']
+    for field in required_fields:
+        if field not in data or data[field] is None:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    try:
+        # Find the buyer
+        buyer = User.query.get(buyer_id)
+        if not buyer:
+            return jsonify({'error': f'User with ID {buyer_id} not found'}), 404
+        
+        if not buyer.is_buyer():
+            return jsonify({'error': f'User with ID {buyer_id} is not a buyer (role: {buyer.role})'}), 404
+        
+        # Parse and validate datetime fields
+        try:
+            from datetime import datetime as dt
+            pickup_datetime = dt.fromisoformat(data['pickup_datetime'].replace('Z', '+00:00'))
+            dropoff_datetime = dt.fromisoformat(data['dropoff_datetime'].replace('Z', '+00:00'))
+            
+            # Validate pickup is before dropoff
+            if dropoff_datetime <= pickup_datetime:
+                return jsonify({'error': 'Dropoff datetime must be after pickup datetime'}), 400
+                
+        except (ValueError, AttributeError) as e:
+            return jsonify({'error': f'Invalid datetime format. Use ISO format (e.g., 2025-06-25T15:00:00Z): {str(e)}'}), 400
+        
+        # Validate vehicle type IDs if provided
+        if 'pickup_vehicle_type_id' in data and data['pickup_vehicle_type_id']:
+            pickup_transport = TransportType.query.get(data['pickup_vehicle_type_id'])
+            if not pickup_transport:
+                return jsonify({'error': f'Invalid pickup vehicle type ID: {data["pickup_vehicle_type_id"]}'}), 400
+        
+        if 'dropoff_vehicle_type_id' in data and data['dropoff_vehicle_type_id']:
+            dropoff_transport = TransportType.query.get(data['dropoff_vehicle_type_id'])
+            if not dropoff_transport:
+                return jsonify({'error': f'Invalid dropoff vehicle type ID: {data["dropoff_vehicle_type_id"]}'}), 400
+        
+        # Find the first available travel plan for this buyer, or create a default one
+        travel_plan = TravelPlan.query.filter_by(user_id=buyer_id).order_by(TravelPlan.created_at.asc()).first()
+        
+        if not travel_plan:
+            # Helper function to get system setting
+            def get_system_setting(key, default_value=None):
+                from ..models import SystemSetting
+                setting = SystemSetting.query.filter_by(key=key).first()
+                return setting.value if setting and setting.value else default_value
+            
+            # Helper function to parse date from setting
+            def parse_date_from_setting(key, fallback_date):
+                date_str = get_system_setting(key)
+                if date_str:
+                    try:
+                        return datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                return fallback_date
+            
+            # Get dynamic event configuration from system settings
+            from datetime import date
+            event_start_date = parse_date_from_setting('event_start_date', date(2025, 6, 25))
+            event_end_date = parse_date_from_setting('event_end_date', date(2025, 6, 28))
+            event_name = get_system_setting('event_name', 'Splash25 Event')
+            event_venue = get_system_setting('event_venue', 'Wayanad, Kerala')
+            
+            # Create a default travel plan using system settings
+            travel_plan = TravelPlan(
+                user_id=buyer_id,
+                event_name=event_name,
+                event_start_date=event_start_date,
+                event_end_date=event_end_date,
+                venue=event_venue,
+                status="active",
+                created_at=datetime.utcnow()
+            )
+            db.session.add(travel_plan)
+            db.session.flush()  # Get the ID without committing yet
+        
+        # Check if buyer already has ground transportation (only one allowed)
+        from ..models import GroundTransportation
+        existing_transportation = GroundTransportation.query.filter_by(travel_plan_id=travel_plan.id).first()
+        
+        if existing_transportation:
+            return jsonify({
+                'error': f'Buyer already has ground transportation allocated. Use update endpoint to modify existing transportation.'
+            }), 400
+        
+        # Create new ground transportation allocation
+        new_transportation = GroundTransportation(
+            travel_plan_id=travel_plan.id,
+            pickup_location=data['pickup_location'],
+            pickup_datetime=pickup_datetime,
+            pickup_vehicle_type=data.get('pickup_vehicle_type_id'),
+            pickup_driver_contact=data.get('pickup_driver_contact', ''),
+            dropoff_location=data['dropoff_location'],
+            dropoff_datetime=dropoff_datetime,
+            dropoff_vehicle_type=data.get('dropoff_vehicle_type_id'),
+            dropoff_driver_contact=data.get('dropoff_driver_contact', '')
+        )
+        
+        db.session.add(new_transportation)
+        db.session.commit()
+        
+        # Return success response with transportation details
+        return jsonify({
+            'message': f'Ground transportation allocated successfully for {buyer.buyer_profile.name if buyer.buyer_profile else buyer.username}',
+            'transportation': new_transportation.to_dict()
+        }), 201
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to allocate ground transportation: {str(e)}'}), 500
+
+@admin.route('/buyers/<int:buyer_id>/transportation', methods=['GET'])
+@admin_required
+def get_buyer_transportation(buyer_id):
+    """
+    Get ground transportation for a specific buyer (admin only)
+    """
+    try:
+        # Find the buyer
+        buyer = User.query.get(buyer_id)
+        if not buyer or not buyer.is_buyer():
+            return jsonify({'error': 'Buyer not found or user is not a buyer'}), 404
+        
+        # Get buyer's travel plan
+        travel_plan = TravelPlan.query.filter_by(user_id=buyer_id).first()
+        if not travel_plan:
+            return jsonify({
+                'buyer_id': buyer_id,
+                'buyer_name': buyer.buyer_profile.name if buyer.buyer_profile else buyer.username,
+                'transportation': None,
+                'message': 'No travel plan found for this buyer'
+            }), 200
+        
+        # Get ground transportation for this travel plan
+        from ..models import GroundTransportation
+        transportation = GroundTransportation.query.filter_by(travel_plan_id=travel_plan.id).first()
+        
+        return jsonify({
+            'buyer_id': buyer_id,
+            'buyer_name': buyer.buyer_profile.name if buyer.buyer_profile else buyer.username,
+            'buyer_organization': buyer.buyer_profile.organization if buyer.buyer_profile else 'Unknown Organization',
+            'transportation': transportation.to_dict() if transportation else None
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch buyer transportation: {str(e)}'}), 500
+
+@admin.route('/transportation/<int:transportation_id>', methods=['PUT'])
+@admin_required
+def update_transportation(transportation_id):
+    """
+    Update ground transportation (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the transportation record
+        from ..models import GroundTransportation
+        transportation = GroundTransportation.query.get(transportation_id)
+        if not transportation:
+            return jsonify({'error': 'Transportation record not found'}), 404
+        
+        # Validate datetime fields if provided
+        pickup_datetime = None
+        dropoff_datetime = None
+        
+        if 'pickup_datetime' in data:
+            try:
+                from datetime import datetime as dt
+                pickup_datetime = dt.fromisoformat(data['pickup_datetime'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                return jsonify({'error': f'Invalid pickup datetime format: {str(e)}'}), 400
+        
+        if 'dropoff_datetime' in data:
+            try:
+                from datetime import datetime as dt
+                dropoff_datetime = dt.fromisoformat(data['dropoff_datetime'].replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                return jsonify({'error': f'Invalid dropoff datetime format: {str(e)}'}), 400
+        
+        # Validate pickup is before dropoff (if both are being updated)
+        final_pickup = pickup_datetime if pickup_datetime else transportation.pickup_datetime
+        final_dropoff = dropoff_datetime if dropoff_datetime else transportation.dropoff_datetime
+        
+        if final_dropoff <= final_pickup:
+            return jsonify({'error': 'Dropoff datetime must be after pickup datetime'}), 400
+        
+        # Validate vehicle type IDs if provided
+        if 'pickup_vehicle_type_id' in data and data['pickup_vehicle_type_id']:
+            pickup_transport = TransportType.query.get(data['pickup_vehicle_type_id'])
+            if not pickup_transport:
+                return jsonify({'error': f'Invalid pickup vehicle type ID: {data["pickup_vehicle_type_id"]}'}), 400
+        
+        if 'dropoff_vehicle_type_id' in data and data['dropoff_vehicle_type_id']:
+            dropoff_transport = TransportType.query.get(data['dropoff_vehicle_type_id'])
+            if not dropoff_transport:
+                return jsonify({'error': f'Invalid dropoff vehicle type ID: {data["dropoff_vehicle_type_id"]}'}), 400
+        
+        # Update transportation fields
+        updatable_fields = [
+            'pickup_location', 'pickup_driver_contact',
+            'dropoff_location', 'dropoff_driver_contact'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                setattr(transportation, field, data[field])
+        
+        # Update datetime fields
+        if pickup_datetime:
+            transportation.pickup_datetime = pickup_datetime
+        if dropoff_datetime:
+            transportation.dropoff_datetime = dropoff_datetime
+        
+        # Update vehicle type IDs
+        if 'pickup_vehicle_type_id' in data:
+            transportation.pickup_vehicle_type = data['pickup_vehicle_type_id']
+        if 'dropoff_vehicle_type_id' in data:
+            transportation.dropoff_vehicle_type = data['dropoff_vehicle_type_id']
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Transportation {transportation_id} updated successfully',
+            'transportation': transportation.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update transportation: {str(e)}'}), 500
+
+@admin.route('/transportation/<int:transportation_id>', methods=['DELETE'])
+@admin_required
+def delete_transportation(transportation_id):
+    """
+    Delete ground transportation (admin only)
+    """
+    try:
+        # Find the transportation record
+        from ..models import GroundTransportation
+        transportation = GroundTransportation.query.get(transportation_id)
+        if not transportation:
+            return jsonify({'error': 'Transportation record not found'}), 404
+        
+        # Get buyer info for response
+        travel_plan = transportation.travel_plan
+        buyer_name = 'Unknown Buyer'
+        if travel_plan and travel_plan.user and travel_plan.user.buyer_profile:
+            buyer_name = travel_plan.user.buyer_profile.name
+        elif travel_plan and travel_plan.user:
+            buyer_name = travel_plan.user.username
+        
+        # Delete the transportation record
+        db.session.delete(transportation)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Ground transportation deleted successfully for {buyer_name}'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete transportation: {str(e)}'}), 500

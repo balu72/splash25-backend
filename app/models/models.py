@@ -690,14 +690,18 @@ class GroundTransportation(db.Model):
     # Pickup details
     pickup_location = db.Column(db.String(200), nullable=False)
     pickup_datetime = db.Column(db.DateTime, nullable=False)
-    pickup_vehicle_type = db.Column(db.String(50), nullable=True)
+    pickup_vehicle_type = db.Column(db.Integer, db.ForeignKey('transport_types.transport_type_id'), nullable=True)
     pickup_driver_contact = db.Column(db.String(50), nullable=True)
     
     # Dropoff details
     dropoff_location = db.Column(db.String(200), nullable=False)
     dropoff_datetime = db.Column(db.DateTime, nullable=False)
-    dropoff_vehicle_type = db.Column(db.String(50), nullable=True)
+    dropoff_vehicle_type = db.Column(db.Integer, db.ForeignKey('transport_types.transport_type_id'), nullable=True)
     dropoff_driver_contact = db.Column(db.String(50), nullable=True)
+    
+    # Relationships
+    pickup_transport = db.relationship('TransportType', foreign_keys=[pickup_vehicle_type], backref=db.backref('pickup_ground_transportations', lazy=True))
+    dropoff_transport = db.relationship('TransportType', foreign_keys=[dropoff_vehicle_type], backref=db.backref('dropoff_ground_transportations', lazy=True))
     
     def to_dict(self):
         return {
@@ -706,13 +710,15 @@ class GroundTransportation(db.Model):
             'pickup': {
                 'location': self.pickup_location,
                 'datetime': self.pickup_datetime.isoformat() if self.pickup_datetime else None,
-                'vehicle_type': self.pickup_vehicle_type,
+                'vehicle_type_id': self.pickup_vehicle_type,
+                'vehicle_type': self.pickup_transport.to_dict() if self.pickup_transport else None,
                 'driver_contact': self.pickup_driver_contact
             },
             'dropoff': {
                 'location': self.dropoff_location,
                 'datetime': self.dropoff_datetime.isoformat() if self.dropoff_datetime else None,
-                'vehicle_type': self.dropoff_vehicle_type,
+                'vehicle_type_id': self.dropoff_vehicle_type,
+                'vehicle_type': self.dropoff_transport.to_dict() if self.dropoff_transport else None,
                 'driver_contact': self.dropoff_driver_contact
             }
         }

@@ -102,6 +102,32 @@ class HostProperty(db.Model):
             'number_current_guests': self.number_current_guests
         }
 
+class TransportType(db.Model):
+    __tablename__ = 'transport_types'
+    
+    transport_type_id = db.Column(db.Integer, primary_key=True)
+    transport_type = db.Column(db.String(100), nullable=False, unique=True)
+    transport_type_description = db.Column(db.String(200), nullable=True)
+    capacity = db.Column(db.Integer, nullable=False)
+    contact_person_name = db.Column(db.String(100), nullable=True)
+    contact_person_phone = db.Column(db.String(50), nullable=True)
+    number_available_vehicles = db.Column(db.Integer, default=0, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'transport_type_id': self.transport_type_id,
+            'transport_type': self.transport_type,
+            'transport_type_description': self.transport_type_description,
+            'capacity': self.capacity,
+            'contact_person_name': self.contact_person_name,
+            'contact_person_phone': self.contact_person_phone,
+            'number_available_vehicles': self.number_available_vehicles,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class Interest(db.Model):
     __tablename__ = 'interests'
     

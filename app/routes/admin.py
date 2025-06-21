@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty, TravelPlan, Accommodation
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -1673,3 +1673,190 @@ def delete_host_property(property_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to delete host property: {str(e)}'}), 500
+
+# Accommodation Allocation Management Endpoints
+
+@admin.route('/buyers/<int:buyer_id>/allocate-accommodation', methods=['POST'])
+@admin_required
+def allocate_accommodation_to_buyer(buyer_id):
+    """
+    Allocate accommodation to a buyer using their first available travel plan (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    required_fields = ['host_property_id', 'room_type', 'check_in_datetime', 'check_out_datetime']
+    for field in required_fields:
+        if field not in data or data[field] is None:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    try:
+        # Find the buyer
+        buyer = User.query.get(buyer_id)
+        if not buyer or not buyer.is_buyer():
+            return jsonify({'error': 'Buyer not found or user is not a buyer'}), 404
+        
+        # Verify host property exists
+        host_property = HostProperty.query.get(data['host_property_id'])
+        if not host_property:
+            return jsonify({'error': 'Host property not found'}), 404
+        
+        # Validate room type
+        valid_room_types = ['single', 'double']
+        if data['room_type'] not in valid_room_types:
+            return jsonify({'error': f'Invalid room type. Must be one of: {valid_room_types}'}), 400
+        
+        # Parse and validate datetime fields
+        try:
+            from datetime import datetime as dt
+            check_in_datetime = dt.fromisoformat(data['check_in_datetime'].replace('Z', '+00:00'))
+            check_out_datetime = dt.fromisoformat(data['check_out_datetime'].replace('Z', '+00:00'))
+            
+            # Validate check_out is after check_in
+            if check_out_datetime <= check_in_datetime:
+                return jsonify({'error': 'Check-out datetime must be after check-in datetime'}), 400
+                
+        except (ValueError, AttributeError) as e:
+            return jsonify({'error': f'Invalid datetime format. Use ISO format (e.g., 2025-06-25T15:00:00Z): {str(e)}'}), 400
+        
+        # Find the first available travel plan for this buyer
+        travel_plan = TravelPlan.query.filter_by(user_id=buyer_id).order_by(TravelPlan.created_at.asc()).first()
+        if not travel_plan:
+            return jsonify({
+                'error': 'No travel plan found for this buyer. Please create a travel plan first.'
+            }), 404
+        
+        # Check if buyer already has accommodation for this travel plan
+        existing_accommodation = Accommodation.query.filter_by(
+            travel_plan_id=travel_plan.id,
+            buyer_id=buyer_id
+        ).first()
+        
+        if existing_accommodation:
+            return jsonify({
+                'error': f'Buyer already has accommodation allocated for travel plan "{travel_plan.event_name}"'
+            }), 400
+        
+        # Create new accommodation allocation
+        new_accommodation = Accommodation(
+            travel_plan_id=travel_plan.id,
+            host_property_id=data['host_property_id'],
+            buyer_id=buyer_id,
+            check_in_datetime=check_in_datetime,
+            check_out_datetime=check_out_datetime,
+            room_type=data['room_type'],
+            booking_reference='',  # Empty as requested
+            special_notes=data.get('special_notes', ''),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        db.session.add(new_accommodation)
+        db.session.commit()
+        
+        # Return success response with accommodation details
+        return jsonify({
+            'message': f'Accommodation allocated successfully for {buyer.buyer_profile.name if buyer.buyer_profile else buyer.username}',
+            'accommodation': new_accommodation.to_dict()
+        }), 201
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to allocate accommodation: {str(e)}'}), 500
+
+@admin.route('/buyers/<int:buyer_id>/accommodations', methods=['GET'])
+@admin_required
+def get_buyer_accommodations(buyer_id):
+    """
+    Get all accommodations allocated to a specific buyer (admin only)
+    """
+    try:
+        # Find the buyer
+        buyer = User.query.get(buyer_id)
+        if not buyer or not buyer.is_buyer():
+            return jsonify({'error': 'Buyer not found or user is not a buyer'}), 404
+        
+        # Get all accommodations for this buyer
+        accommodations = Accommodation.query.filter_by(buyer_id=buyer_id).all()
+        
+        return jsonify({
+            'buyer_id': buyer_id,
+            'buyer_name': buyer.buyer_profile.name if buyer.buyer_profile else buyer.username,
+            'buyer_organization': buyer.buyer_profile.organization if buyer.buyer_profile else 'Unknown Organization',
+            'accommodations': [accommodation.to_dict() for accommodation in accommodations],
+            'total_count': len(accommodations)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch buyer accommodations: {str(e)}'}), 500
+
+@admin.route('/accommodations/<int:accommodation_id>/deallocate', methods=['DELETE'])
+@admin_required
+def deallocate_accommodation(accommodation_id):
+    """
+    Deallocate accommodation from a buyer (admin only)
+    """
+    try:
+        # Find the accommodation
+        accommodation = Accommodation.query.get(accommodation_id)
+        if not accommodation:
+            return jsonify({'error': 'Accommodation not found'}), 404
+        
+        # Store buyer and property info for response
+        buyer_name = accommodation.buyer.buyer_profile.name if accommodation.buyer and accommodation.buyer.buyer_profile else 'Unknown Buyer'
+        property_name = accommodation.host_property.property_name if accommodation.host_property else 'Unknown Property'
+        
+        # Delete the accommodation allocation
+        db.session.delete(accommodation)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Accommodation at "{property_name}" deallocated successfully from {buyer_name}'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to deallocate accommodation: {str(e)}'}), 500
+
+@admin.route('/accommodations', methods=['GET'])
+@admin_required
+def get_all_accommodations():
+    """
+    Get all accommodation allocations (admin only)
+    """
+    try:
+        accommodations = Accommodation.query.all()
+        
+        accommodations_data = []
+        for accommodation in accommodations:
+            accommodation_dict = accommodation.to_dict()
+            # Add additional summary information
+            if accommodation.buyer and accommodation.buyer.buyer_profile:
+                accommodation_dict['buyer_summary'] = {
+                    'id': accommodation.buyer.id,
+                    'name': accommodation.buyer.buyer_profile.name,
+                    'organization': accommodation.buyer.buyer_profile.organization,
+                    'email': accommodation.buyer.email
+                }
+            if accommodation.host_property:
+                accommodation_dict['property_summary'] = {
+                    'id': accommodation.host_property.property_id,
+                    'name': accommodation.host_property.property_name,
+                    'total_rooms': accommodation.host_property.rooms_allotted
+                }
+            accommodations_data.append(accommodation_dict)
+        
+        return jsonify({
+            'accommodations': accommodations_data,
+            'total_count': len(accommodations_data)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch accommodations: {str(e)}'}), 500

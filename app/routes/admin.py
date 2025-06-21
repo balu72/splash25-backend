@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -1436,3 +1436,240 @@ def get_all_stalls():
         
     except Exception as e:
         return jsonify({'error': f'Failed to fetch stalls: {str(e)}'}), 500
+
+# Host Properties Management Endpoints
+
+@admin.route('/host-properties', methods=['GET'])
+@admin_required
+def get_host_properties():
+    """
+    Get all host properties (admin only)
+    """
+    try:
+        properties = HostProperty.query.all()
+        return jsonify({
+            'host_properties': [property.to_dict() for property in properties],
+            'total_count': len(properties)
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch host properties: {str(e)}'
+        }), 500
+
+@admin.route('/host-properties', methods=['POST'])
+@admin_required
+def create_host_property():
+    """
+    Create new host property (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate required fields
+    required_fields = ['property_name', 'rooms_allotted']
+    for field in required_fields:
+        if field not in data or data[field] is None:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Validate property_name length
+    if len(data['property_name'].strip()) == 0:
+        return jsonify({'error': 'Property name cannot be empty'}), 400
+    
+    if len(data['property_name']) > 100:
+        return jsonify({'error': 'Property name cannot exceed 100 characters'}), 400
+    
+    # Validate rooms_allotted is positive integer
+    try:
+        rooms_allotted = int(data['rooms_allotted'])
+        if rooms_allotted <= 0:
+            return jsonify({'error': 'Rooms allotted must be a positive number'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Rooms allotted must be a valid number'}), 400
+    
+    # Validate email format if provided
+    if 'contact_email' in data and data['contact_email']:
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, data['contact_email']):
+            return jsonify({'error': 'Invalid email format'}), 400
+    
+    # Validate field lengths
+    field_limits = {
+        'contact_person_name': 100,
+        'contact_phone': 50,
+        'contact_email': 100,
+        'property_address': 200
+    }
+    
+    for field, max_length in field_limits.items():
+        if field in data and data[field] and len(data[field]) > max_length:
+            return jsonify({'error': f'{field} cannot exceed {max_length} characters'}), 400
+    
+    try:
+        # Create new host property
+        property = HostProperty(
+            property_name=data['property_name'].strip(),
+            rooms_allotted=rooms_allotted,
+            contact_person_name=data.get('contact_person_name', '').strip() if data.get('contact_person_name') else None,
+            contact_phone=data.get('contact_phone', '').strip() if data.get('contact_phone') else None,
+            contact_email=data.get('contact_email', '').strip() if data.get('contact_email') else None,
+            property_address=data.get('property_address', '').strip() if data.get('property_address') else None,
+            number_current_guests=int(data['number_current_guests']) if data.get('number_current_guests') is not None else None
+        )
+        
+        db.session.add(property)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Host property created successfully',
+            'host_property': property.to_dict()
+        }), 201
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to create host property: {str(e)}'
+        }), 500
+
+@admin.route('/host-properties/<int:property_id>', methods=['GET'])
+@admin_required
+def get_host_property(property_id):
+    """
+    Get specific host property (admin only)
+    """
+    try:
+        property = HostProperty.query.get(property_id)
+        if not property:
+            return jsonify({'error': 'Host property not found'}), 404
+        
+        return jsonify({
+            'host_property': property.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to fetch host property: {str(e)}'
+        }), 500
+
+@admin.route('/host-properties/<int:property_id>', methods=['PUT'])
+@admin_required
+def update_host_property(property_id):
+    """
+    Update host property (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the property
+        property = HostProperty.query.get(property_id)
+        if not property:
+            return jsonify({'error': 'Host property not found'}), 404
+        
+        # Validate property_name if provided
+        if 'property_name' in data:
+            if not data['property_name'] or len(data['property_name'].strip()) == 0:
+                return jsonify({'error': 'Property name cannot be empty'}), 400
+            if len(data['property_name']) > 100:
+                return jsonify({'error': 'Property name cannot exceed 100 characters'}), 400
+        
+        # Validate rooms_allotted if provided
+        if 'rooms_allotted' in data:
+            try:
+                rooms_allotted = int(data['rooms_allotted'])
+                if rooms_allotted <= 0:
+                    return jsonify({'error': 'Rooms allotted must be a positive number'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Rooms allotted must be a valid number'}), 400
+        
+        # Validate email format if provided
+        if 'contact_email' in data and data['contact_email']:
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, data['contact_email']):
+                return jsonify({'error': 'Invalid email format'}), 400
+        
+        # Validate field lengths
+        field_limits = {
+            'contact_person_name': 100,
+            'contact_phone': 50,
+            'contact_email': 100,
+            'property_address': 200
+        }
+        
+        for field, max_length in field_limits.items():
+            if field in data and data[field] and len(data[field]) > max_length:
+                return jsonify({'error': f'{field} cannot exceed {max_length} characters'}), 400
+        
+        # Update property fields
+        updatable_fields = [
+            'property_name', 'rooms_allotted', 'contact_person_name',
+            'contact_phone', 'contact_email', 'property_address', 'number_current_guests'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                if field == 'property_name':
+                    # Handle required string field
+                    setattr(property, field, data[field].strip())
+                elif field in ['rooms_allotted', 'number_current_guests']:
+                    # Handle integer fields
+                    if data[field] is not None:
+                        setattr(property, field, int(data[field]))
+                    else:
+                        setattr(property, field, None)
+                else:
+                    # Handle optional string fields
+                    if data[field] is not None:
+                        setattr(property, field, data[field].strip() if data[field] else None)
+                    else:
+                        setattr(property, field, None)
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Host property {property_id} updated successfully',
+            'host_property': property.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update host property: {str(e)}'}), 500
+
+@admin.route('/host-properties/<int:property_id>', methods=['DELETE'])
+@admin_required
+def delete_host_property(property_id):
+    """
+    Delete host property (admin only)
+    """
+    try:
+        # Find the property
+        property = HostProperty.query.get(property_id)
+        if not property:
+            return jsonify({'error': 'Host property not found'}), 404
+        
+        # Store property name for response
+        property_name = property.property_name
+        
+        # Delete the property
+        db.session.delete(property)
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Host property "{property_name}" deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete host property: {str(e)}'}), 500

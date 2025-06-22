@@ -566,12 +566,206 @@ def get_attendees():
     if not seller_profile:
         return jsonify({'error': 'Seller profile not found'}), 404
     
-    # Get attendees
-    attendees = SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id).all()
+    # Get attendees ordered by attendee_number
+    attendees = SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id).order_by(SellerAttendee.attendee_number).all()
     
     return jsonify({
         'attendees': [attendee.to_dict() for attendee in attendees]
     }), 200
+
+@seller.route('/attendees', methods=['POST'])
+@jwt_required()
+@seller_required
+def create_attendee():
+    """Create a new attendee for the current seller"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['name', 'designation', 'email', 'mobile']
+    for field in required_fields:
+        if field not in data or not data[field]:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+    
+    # Validate email format
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, data['email']):
+        return jsonify({'error': 'Invalid email format'}), 400
+    
+    # Check if email already exists for this seller
+    existing_attendee = SellerAttendee.query.filter_by(
+        seller_profile_id=seller_profile.id,
+        email=data['email']
+    ).first()
+    if existing_attendee:
+        return jsonify({'error': 'Email already exists for another attendee'}), 400
+    
+    # Get next attendee number
+    max_attendee = SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id).order_by(SellerAttendee.attendee_number.desc()).first()
+    next_number = (max_attendee.attendee_number + 1) if max_attendee else 1
+    
+    # Handle primary contact logic
+    is_primary = data.get('is_primary_contact', False)
+    if is_primary:
+        # Remove primary contact status from other attendees
+        SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id, is_primary_contact=True).update({'is_primary_contact': False})
+    
+    try:
+        # Create new attendee
+        new_attendee = SellerAttendee(
+            seller_profile_id=seller_profile.id,
+            attendee_number=next_number,
+            name=data['name'].strip(),
+            designation=data['designation'].strip(),
+            email=data['email'].strip().lower(),
+            mobile=data['mobile'].strip(),
+            is_primary_contact=is_primary
+        )
+        
+        db.session.add(new_attendee)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Attendee created successfully',
+            'attendee': new_attendee.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to create attendee',
+            'message': str(e)
+        }), 500
+
+@seller.route('/attendees/<int:attendee_id>', methods=['PUT'])
+@jwt_required()
+@seller_required
+def update_attendee(attendee_id):
+    """Update an existing attendee"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Find the attendee and verify ownership
+    attendee = SellerAttendee.query.filter_by(
+        id=attendee_id,
+        seller_profile_id=seller_profile.id
+    ).first()
+    
+    if not attendee:
+        return jsonify({'error': 'Attendee not found or access denied'}), 404
+    
+    data = request.get_json()
+    
+    # Validate email format if provided
+    if 'email' in data and data['email']:
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, data['email']):
+            return jsonify({'error': 'Invalid email format'}), 400
+        
+        # Check if email already exists for another attendee
+        existing_attendee = SellerAttendee.query.filter_by(
+            seller_profile_id=seller_profile.id,
+            email=data['email']
+        ).filter(SellerAttendee.id != attendee_id).first()
+        if existing_attendee:
+            return jsonify({'error': 'Email already exists for another attendee'}), 400
+    
+    # Handle primary contact logic
+    if 'is_primary_contact' in data and data['is_primary_contact']:
+        # Remove primary contact status from other attendees
+        SellerAttendee.query.filter_by(seller_profile_id=seller_profile.id, is_primary_contact=True).update({'is_primary_contact': False})
+    
+    try:
+        # Update fields
+        updatable_fields = ['name', 'designation', 'email', 'mobile', 'is_primary_contact']
+        for field in updatable_fields:
+            if field in data:
+                if field in ['name', 'designation', 'email', 'mobile']:
+                    setattr(attendee, field, data[field].strip() if data[field] else '')
+                    if field == 'email':
+                        attendee.email = attendee.email.lower()
+                else:
+                    setattr(attendee, field, data[field])
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Attendee updated successfully',
+            'attendee': attendee.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to update attendee',
+            'message': str(e)
+        }), 500
+
+@seller.route('/attendees/<int:attendee_id>', methods=['DELETE'])
+@jwt_required()
+@seller_required
+def delete_attendee(attendee_id):
+    """Delete an attendee"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Find the attendee and verify ownership
+    attendee = SellerAttendee.query.filter_by(
+        id=attendee_id,
+        seller_profile_id=seller_profile.id
+    ).first()
+    
+    if not attendee:
+        return jsonify({'error': 'Attendee not found or access denied'}), 404
+    
+    try:
+        db.session.delete(attendee)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Attendee deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to delete attendee',
+            'message': str(e)
+        }), 500
 
 @seller.route('/property-types', methods=['GET'])
 @jwt_required()

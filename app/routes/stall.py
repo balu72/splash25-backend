@@ -28,6 +28,12 @@ def get_stalls():
         for stall, seller_profile in stalls:
             stall_dict = stall.to_dict()
             stall_dict['fascia_name'] = seller_profile.business_name
+            # Include complete stall type information for attendee calculations
+            if stall.stall_type_rel:
+                stall_dict['stall_type_info'] = stall.stall_type_rel.to_dict()
+                # Map the stall type fields to the stall for backward compatibility
+                stall_dict['allowed_attendees'] = stall.stall_type_rel.attendees
+                stall_dict['max_additional_seller_passes'] = stall.stall_type_rel.max_additional_seller_passes
             stall_list.append(stall_dict)
         
         return jsonify({

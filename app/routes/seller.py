@@ -794,6 +794,43 @@ def get_interests():
         return jsonify({
             'error': f'Failed to fetch interests: {str(e)}'
         }), 500
+
+@seller.route('/financial-info', methods=['GET'])
+@jwt_required()
+@seller_required
+def get_financial_info():
+    """Get financial information for the current seller"""
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Get financial info
+    financial_info = SellerFinancialInfo.query.filter_by(seller_profile_id=seller_profile.id).first()
+    
+    if not financial_info:
+        # Return default values if no financial info exists
+        return jsonify({
+            'financial_info': {
+                'actual_additional_seller_passes': 0,
+                'deposit_paid': False,
+                'total_amt_due': None,
+                'total_amt_paid': None,
+                'subscription_uptodate': False
+            }
+        }), 200
+    
+    return jsonify({
+        'financial_info': financial_info.to_dict()
+    }), 200
     
 
 @seller.route('/public/<path:microsite_path>', methods=['GET'])

@@ -953,6 +953,7 @@ class SellerFinancialInfo(db.Model):
     total_amt_due = db.Column(db.Numeric(10, 2))
     total_amt_paid = db.Column(db.Numeric(10, 2))
     subscription_uptodate = db.Column(db.Boolean, default=False)
+    actual_additional_seller_passes = db.Column(db.Integer, default=0, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -966,6 +967,7 @@ class SellerFinancialInfo(db.Model):
             'total_amt_due': float(self.total_amt_due) if self.total_amt_due else None,
             'total_amt_paid': float(self.total_amt_paid) if self.total_amt_paid else None,
             'subscription_uptodate': self.subscription_uptodate,
+            'actual_additional_seller_passes': self.actual_additional_seller_passes,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

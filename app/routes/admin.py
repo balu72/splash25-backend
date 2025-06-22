@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import datetime, timedelta
 from ..utils.auth import admin_required
-from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty, TravelPlan, Accommodation, TransportType
+from ..models import db, User, UserRole, InvitedBuyer, PendingBuyer, DomainRestriction, Meeting, Listing, SellerProfile, BuyerProfile, BuyerCategory, HostProperty, TravelPlan, Accommodation, TransportType, SellerFinancialInfo
 from sqlalchemy import func
 from ..utils.email_service import send_invitation_email, send_approval_email, send_rejection_email
 
@@ -2554,3 +2554,191 @@ def delete_transportation(transportation_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to delete transportation: {str(e)}'}), 500
+
+# Seller Financial Information Management Endpoints
+
+@admin.route('/sellers/<int:seller_id>/financial-info', methods=['GET'])
+@admin_required
+def get_seller_financial_info(seller_id):
+    """
+    Get financial information for a specific seller (admin only)
+    """
+    try:
+        # Find the seller
+        seller = User.query.get(seller_id)
+        if not seller or not seller.is_seller():
+            return jsonify({'error': 'Seller not found or user is not a seller'}), 404
+        
+        # Get seller profile to get the seller_profile_id
+        seller_profile = SellerProfile.query.filter_by(user_id=seller_id).first()
+        if not seller_profile:
+            return jsonify({'error': 'Seller profile not found'}), 404
+        
+        # Get financial information
+        financial_info = SellerFinancialInfo.query.filter_by(seller_profile_id=seller_profile.id).first()
+        
+        if not financial_info:
+            # Return default structure if no financial info exists
+            return jsonify({
+                'seller_id': seller_id,
+                'seller_name': seller_profile.business_name,
+                'financial_info': {
+                    'deposit_paid': False,
+                    'total_amt_due': None,
+                    'total_amt_paid': None,
+                    'subscription_uptodate': False,
+                    'actual_additional_seller_passes': 0,
+                    'created_at': None
+                }
+            }), 200
+        
+        return jsonify({
+            'seller_id': seller_id,
+            'seller_name': seller_profile.business_name,
+            'financial_info': financial_info.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch seller financial info: {str(e)}'}), 500
+
+@admin.route('/sellers/<int:seller_id>/financial-info', methods=['PUT'])
+@admin_required
+def update_seller_financial_info(seller_id):
+    """
+    Update financial information for a specific seller (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the seller
+        seller = User.query.get(seller_id)
+        if not seller or not seller.is_seller():
+            return jsonify({'error': 'Seller not found or user is not a seller'}), 404
+        
+        # Get seller profile to get the seller_profile_id
+        seller_profile = SellerProfile.query.filter_by(user_id=seller_id).first()
+        if not seller_profile:
+            return jsonify({'error': 'Seller profile not found'}), 404
+        
+        # Get or create financial information
+        financial_info = SellerFinancialInfo.query.filter_by(seller_profile_id=seller_profile.id).first()
+        
+        if not financial_info:
+            # Create new financial info record
+            financial_info = SellerFinancialInfo(
+                seller_profile_id=seller_profile.id,
+                deposit_paid=False,
+                total_amt_due=None,
+                total_amt_paid=None,
+                subscription_uptodate=False,
+                actual_additional_seller_passes=0,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(financial_info)
+        
+        # Update financial info fields
+        if 'deposit_paid' in data:
+            financial_info.deposit_paid = bool(data['deposit_paid'])
+        
+        if 'total_amt_due' in data:
+            if data['total_amt_due'] is not None:
+                try:
+                    financial_info.total_amt_due = float(data['total_amt_due'])
+                except (ValueError, TypeError):
+                    return jsonify({'error': 'Invalid total_amt_due format'}), 400
+            else:
+                financial_info.total_amt_due = None
+        
+        if 'total_amt_paid' in data:
+            if data['total_amt_paid'] is not None:
+                try:
+                    financial_info.total_amt_paid = float(data['total_amt_paid'])
+                except (ValueError, TypeError):
+                    return jsonify({'error': 'Invalid total_amt_paid format'}), 400
+            else:
+                financial_info.total_amt_paid = None
+        
+        if 'subscription_uptodate' in data:
+            financial_info.subscription_uptodate = bool(data['subscription_uptodate'])
+        
+        if 'actual_additional_seller_passes' in data:
+            try:
+                financial_info.actual_additional_seller_passes = int(data['actual_additional_seller_passes'])
+                if financial_info.actual_additional_seller_passes < 0:
+                    return jsonify({'error': 'Additional seller passes cannot be negative'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Invalid actual_additional_seller_passes format'}), 400
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Financial information updated successfully for {seller_profile.business_name}',
+            'financial_info': financial_info.to_dict()
+        }), 200
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': f'Invalid data format: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update seller financial info: {str(e)}'}), 500
+
+@admin.route('/stalls/<int:stall_id>', methods=['PUT'])
+@admin_required
+def update_stall(stall_id):
+    """
+    Update stall information (admin only)
+    """
+    data = request.get_json()
+    
+    # Validate input data
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        # Find the stall
+        from ..models import Stall
+        stall = Stall.query.get(stall_id)
+        if not stall:
+            return jsonify({'error': 'Stall not found'}), 404
+        
+        # Update stall fields
+        updatable_fields = ['allocated_stall_number', 'fascia_name']
+        
+        for field in updatable_fields:
+            if field in data:
+                setattr(stall, field, data[field])
+        
+        # Commit changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Stall {stall_id} updated successfully',
+            'stall': stall.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update stall: {str(e)}'}), 500
+
+@admin.route('/stall-types', methods=['GET'])
+@admin_required
+def get_available_stall_types():
+    """
+    Get all available stall types for allocation (admin only)
+    """
+    try:
+        from ..models import StallType
+        stall_types = StallType.query.filter_by(saleable=True).all()
+        
+        return jsonify({
+            'stall_types': [stall_type.to_dict() for stall_type in stall_types]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch stall types: {str(e)}'}), 500

@@ -886,3 +886,200 @@ def get_seller_by_microsite(microsite_path):
         return jsonify({
             'error': f'Failed to fetch seller profile: {str(e)}'
         }), 500
+
+
+@seller.route('/profile/logo', methods=['POST'])
+@jwt_required()
+@seller_required
+def upload_seller_logo():
+    """Upload business logo for the current seller"""
+    import os
+    import requests
+    import uuid
+    from datetime import datetime
+    from werkzeug.utils import secure_filename
+    import base64
+    import logging
+    
+    user_id = get_jwt_identity()
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Get seller profile
+    seller_profile = SellerProfile.query.filter_by(user_id=user_id).first()
+    if not seller_profile:
+        return jsonify({'error': 'Seller profile not found'}), 404
+    
+    # Check if file is present in request
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Validate file
+    allowed_extensions = {'jpg', 'jpeg', 'png', 'ico'}
+    file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    
+    if file_ext not in allowed_extensions:
+        return jsonify({'error': 'Invalid file type. Only JPEG, PNG, and ICO files are allowed'}), 400
+    
+    # Check file size (1MB limit)
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to beginning
+    
+    if file_size > 1 * 1024 * 1024:  # 1MB
+        return jsonify({'error': 'File size exceeds 1MB limit'}), 400
+    
+    # Get external storage credentials from environment
+    storage_url = os.getenv('EXTERNAL_STORAGE_URL')+"index.php"
+    storage_user = os.getenv('EXTERNAL_STORAGE_USER')
+    storage_password = os.getenv('EXTERNAL_STORAGE_PASSWORD')
+    ocs_url = os.getenv("EXTERNAL_STORAGE_URL")+'ocs/v2.php/apps/files_sharing/api/v1/shares'
+    ocs_headers = {'OCS-APIRequest': 'true',"Accept": "application/json"}
+    ocs_auth = (storage_user, storage_password)  # Use app password or user/pass
+    
+    if not all([storage_url, storage_user, storage_password]):
+        return jsonify({'error': 'External storage configuration missing'}), 500
+    
+    nc = Nextcloud(nextcloud_url=storage_url, nc_auth_user=storage_user, nc_auth_pass=storage_password)
+    
+    try:
+        seller_base_dir_available = False
+        seller_logo_dir_available = False
+        # Create seller directory path if it doesn't exist
+        seller_dir = f"seller_{user_id}"
+        remote_dir_path = f"/Photos/{seller_dir}"
+        remote_logo_dir_path = f"{remote_dir_path}/logo"
+        try:
+            nc.files.listdir(remote_dir_path)
+            logging.debug(f"Found remote path:: {remote_dir_path}")
+            seller_base_dir_available = True
+        except NextcloudException as e:
+            if e.status_code != 404:
+                raise e
+            else:
+                try:
+                    logging.info(f"Could not locate remote directory::: {remote_dir_path}::: Proceeding to create")
+                    nc.files.mkdir(remote_dir_path)
+                    logging.debug(f"Created remote directory {remote_dir_path} successfully")
+                    logging.debug("Now setting sharing permissions...")
+                    seller_dir_sharing_data = {
+                        'path': remote_dir_path,         # Folder you created
+                        'shareType': 3,                  # Public link
+                        'permissions': 1                 # Read-only
+                    }
+                    response = requests.post(ocs_url, headers=ocs_headers, data=seller_dir_sharing_data, auth=ocs_auth)
+
+                    if response.status_code == 200:
+                        logging.info(f"Response Text is:: {response}")
+                        share_info = response.json()
+                        link = share_info['ocs']['data']['url']
+                        logging.debug(f"Public Share URL: {link}")
+                        seller_base_dir_available = True
+                    else:
+                        seller_base_dir_available = False
+                        logging.debug("Failed to create share:", response.text)
+                except Exception as e:
+                    logging.debug(f"Exception while creating seller directory:{str(e)}")
+                    return jsonify({"Exception": f"Failed to create base seller directory -- {remote_dir_path} - the error is ::::{str(e)}"}), 500
+        
+        # Now check if logo directory exists and if not, create it
+        if seller_base_dir_available: 
+            try:
+                nc.files.listdir(remote_logo_dir_path)
+                logging.debug(f"Found remote logo dir path:: {remote_logo_dir_path}")
+                seller_logo_dir_available = True
+            except NextcloudException as e:
+                if e.status_code != 404:
+                    raise e
+                else:
+                    try:
+                        logging.info(f"Could not locate remote logo directory::: {remote_logo_dir_path}::: Proceeding to create")
+                        nc.files.mkdir(remote_logo_dir_path)
+                        logging.debug(f"Created remote directory {remote_logo_dir_path} successfully")
+                        logging.debug("Now setting sharing permissions...")
+                        seller_dir_sharing_data = {
+                            'path': remote_dir_path,         # Folder you created
+                            'shareType': 3,                  # Public link
+                            'permissions': 1                 # Read-only
+                        }
+                        response = requests.post(ocs_url, headers=ocs_headers, data=seller_dir_sharing_data, auth=ocs_auth)
+
+                        if response.status_code == 200:
+                            logging.info(f"Response Text is:: {response}")
+                            share_info = response.json()
+                            link = share_info['ocs']['data']['url']
+                            logging.debug(f"Public Share URL: {link}")
+                            seller_logo_dir_available = True
+                        else:
+                            seller_logo_dir_available = False
+                            logging.debug("Failed to create share:", response.text)
+                    except Exception as e:
+                        logging.debug(f"Exception while creating seller logo directory:{str(e)}")
+                        return jsonify({"Exception": f"Failed to create seller logo directory -- {remote_logo_dir_path} - the error is ::::{str(e)}"}), 500
+
+        # Generate unique filename for logo
+        secure_name = secure_filename(file.filename)
+        filename = f"logo_{user_id}_{secure_name}"
+        
+        # Prepare file data for upload
+        file_data = file.read()
+        file.seek(0)  # Reset for potential retry
+        
+        # Upload to external storage
+        upload_url = f"{remote_logo_dir_path}/{filename}"
+        
+        try:
+            buf = BytesIO(file_data)  
+            buf.seek(0)
+            logging.info(f"Uploading logo file :::: {upload_url}")
+            uploaded_file = nc.files.upload_stream(upload_url, buf)
+            logging.info(f"The uploaded file data is::: {(uploaded_file.name)}")
+            
+            # Now give it a publicly available link 
+            seller_file_sharing_data = {
+                'path': upload_url,              # Uploaded file
+                'shareType': 3,                  # Public link
+                'permissions': 1                 # Read-only
+            }
+            response = requests.post(ocs_url, headers=ocs_headers, data=seller_file_sharing_data, auth=ocs_auth)
+            file_public_url = ""
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result["ocs"]["meta"]["status"] == "ok":
+                    file_public_url = result["ocs"]["data"]["url"]
+                    logging.debug(f"Public share URL: {file_public_url}")
+                else:
+                    logging.error(f"Share API error: {result['ocs']['meta']['message']}")
+                    return jsonify({'error': 'Failed to create public share for logo'}), 500
+            else:
+                logging.error(f"HTTP error: {response.status_code} {response.text}")
+                return jsonify({'error': 'Failed to create public share for logo'}), 500
+            
+            # Update seller profile with new logo URL
+            seller_profile.logo_url = file_public_url + "/download"
+            
+            try:
+                db.session.commit()
+                return jsonify({
+                    'message': 'Logo uploaded successfully',
+                    'seller': seller_profile.to_dict()
+                }), 200
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({'error': f'Failed to update profile with logo URL: {str(e)}'}), 500
+                
+        except Exception as e:
+            logging.debug(f"Exception while uploading logo file:{e}")
+            return jsonify({'error': f'Failed to upload logo file {upload_url}:::{str(e)}'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to upload logo: {str(e)}'}), 500

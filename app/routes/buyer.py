@@ -1,6 +1,15 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
+from nc_py_api import Nextcloud, NextcloudException
+from io import BytesIO
+from PIL import Image
+import base64
+import requests
+from urllib.parse import urlparse
+from werkzeug.utils import secure_filename
+import os
+import logging
 from ..utils.auth import buyer_required
 from ..models import db, User, TravelPlan, Transportation, Accommodation, GroundTransportation, Meeting, MeetingStatus, UserRole, TimeSlot, SystemSetting, BuyerProfile, BuyerCategory, PropertyType, Interest, StallType
 
@@ -945,6 +954,199 @@ def update_meeting(meeting_id):
         'message': 'Meeting updated successfully',
         'meeting': meeting.to_dict()
     }), 200
+
+@buyer.route('/profile/image', methods=['POST'])
+@buyer_required
+def upload_profile_image():
+    """
+    Endpoint to upload buyer profile image
+    """
+    user_id = get_jwt_identity()
+    
+    # Convert to int if it's a string
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID'}), 400
+    
+    # Check if file was uploaded
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    
+    # Validate file
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Check file type
+    allowed_extensions = {'jpg', 'jpeg', 'png'}
+    if not '.' in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({'error': 'Invalid file type. Only JPG, JPEG, and PNG files are allowed'}), 400
+    
+    # Check file size (1MB limit)
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)  # Reset file pointer
+    
+    if file_size > 1 * 1024 * 1024:  # 1MB
+        return jsonify({'error': 'File size exceeds 1MB limit'}), 400
+    
+    try:
+        # Get buyer profile
+        buyer_profile = BuyerProfile.query.filter_by(user_id=user_id).first()
+        if not buyer_profile:
+            return jsonify({'error': 'Buyer profile not found'}), 404
+        
+        # Get external storage credentials from environment
+        storage_url = os.getenv('EXTERNAL_STORAGE_URL')+"index.php"
+        storage_user = os.getenv('EXTERNAL_STORAGE_USER')
+        storage_password = os.getenv('EXTERNAL_STORAGE_PASSWORD')
+        ocs_url = os.getenv("EXTERNAL_STORAGE_URL")+'ocs/v2.php/apps/files_sharing/api/v1/shares'
+        ocs_headers = {'OCS-APIRequest': 'true',"Accept": "application/json"}
+        ocs_auth = (storage_user, storage_password)  # Use app password or user/pass
+        
+        if not all([storage_url, storage_user, storage_password]):
+            return jsonify({'error': 'External storage configuration missing'}), 500
+        
+        nc = Nextcloud(nextcloud_url=storage_url, nc_auth_user=storage_user, nc_auth_pass=storage_password)
+
+        # Save file to uploads directory
+        # upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profile_images')
+        buyer_base_dir_available = False
+        buyer_image_profile_dir_available = False
+        buyer_dir = f"buyer_{user_id}/"
+        remote_dir_path = f"/Photos/{buyer_dir}"
+        remote_base_profile_images_path = f"/Photos/{buyer_dir}/profile"
+        # Make base dir for buyer
+        try:
+            nc.files.listdir(remote_dir_path)
+            logging.debug(f"Found remote path:: {remote_dir_path}")
+            buyer_base_dir_available = True
+        except NextcloudException as e:
+            if e.status_code != 404:
+                raise e
+            else:
+                try:
+                    logging.info(f"Could not locate remote directory::: {remote_dir_path}::: Proceeding to create")
+                    nc.files.mkdir(remote_dir_path)
+                    logging.debug(f"Created remote directory {remote_dir_path} successfully")
+                    logging.debug("Now setting sharing permissions...")
+                    dir_sharing_data = {
+                        'path': remote_dir_path,         # Folder you created
+                        'shareType': 3,                  # Public link
+                        'permissions': 1                 # Read-only
+                    }
+                    response = requests.post(ocs_url, headers=ocs_headers, data=dir_sharing_data, auth=ocs_auth)
+
+                    if response.status_code == 200:
+                        logging.info(f"Response Text is:: {response}")
+                        share_info = response.json()
+                        link = share_info['ocs']['data']['url']
+                        logging.debug(f"Public Share URL: {link}")
+                        buyer_base_dir_available = True
+                    else:
+                        logging.debug("Failed to create share:", response.text)
+                except Exception as e:
+                    logging.debug(f"Exception while creating buyer base directory:{str(e)}")
+                    return jsonify({"Exception": f"Failed to create buyer base directory -- {remote_dir_path} - the error is ::::{str(e)}"}), 500
+
+        # If we have buyer base directory, check if we have buyer profile image directory
+        if buyer_base_dir_available: 
+            try:
+                nc.files.listdir(remote_base_profile_images_path)
+                logging.debug(f"Found remote path:: {remote_dir_path}")
+                buyer_image_profile_dir_available = True
+            except NextcloudException as e:
+                if e.status_code != 404:
+                    raise e
+                else:
+                    try:
+                        logging.info(f"Could not locate buyer profile image directory::: {remote_base_profile_images_path}::: Proceeding to create")
+                        nc.files.mkdir(remote_base_profile_images_path)
+                        logging.debug(f"Created remote directory {remote_dir_path} successfully")
+                        logging.debug("Now setting sharing permissions...")
+                        dir_sharing_data = {
+                            'path': remote_base_profile_images_path,         # Folder you created
+                            'shareType': 3,                  # Public link
+                            'permissions': 1                 # Read-only
+                        }
+                        response = requests.post(ocs_url, headers=ocs_headers, data=dir_sharing_data, auth=ocs_auth)
+                        if response.status_code == 200:
+                            logging.info(f"Response Text is:: {response}")
+                            share_info = response.json()
+                            link = share_info['ocs']['data']['url']
+                            logging.debug(f"Public Share URL: {link}")
+                            buyer_image_profile_dir_available = True
+                        else:
+                            logging.debug("Failed to create buyer profile image directtory:", response.text)
+                    except Exception as e:
+                        logging.debug(f"Exception while creating buyer buyer profile images directory:{str(e)}")
+                        return jsonify({"Exception": f"Failed to create buyer bprofile imagesase directory -- {remote_base_profile_images_path} - the error is ::::{str(e)}"}), 500
+
+
+        # Generate unique filename
+        filename = secure_filename(f"buyer_{user_id}_{int(datetime.now().timestamp())}.{file.filename.rsplit('.', 1)[1].lower()}")
+
+        # Prepare file data for upload
+        file_data = file.read()
+        file.seek(0)  # Reset for potential retry
+            
+        # Create basic auth header
+        auth_string = f"{storage_user}:{storage_password}"
+        auth_bytes = auth_string.encode('ascii')
+        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+
+        # File upload URL
+        upload_url = f"{remote_base_profile_images_path}/{filename}"
+        
+        # Public URL for storage and reading
+        file_public_url=""
+        
+        # Upload file
+        try:        
+            buf = BytesIO(file_data)  
+            buf.seek(0)
+            logging.info(f"Uploading file :::: {upload_url}")
+            uploaded_file = nc.files.upload_stream(upload_url, buf)
+            logging.info(f"The uploaded file data is::: {(uploaded_file.name)}")
+            # Now give it a publicly available link 
+            seller_file_sharing_data = {
+                'path': upload_url,              # Uploaded file
+                'shareType': 3,                  # Public link
+                'permissions': 1                 # Read-only
+            }
+            response = requests.post(ocs_url, headers=ocs_headers, data=seller_file_sharing_data, auth=ocs_auth)
+            if response.status_code == 200:
+                result = response.json()
+                if result["ocs"]["meta"]["status"] == "ok":
+                    file_public_url = result["ocs"]["data"]["url"]
+                    logging.debug(f"Public share URL: {file_public_url}")
+                else:
+                    logging.error(f"Share API error: {result['ocs']['meta']['message']}")
+            else:
+                print("HTTP error:", response.status_code, response.text)
+        except Exception as e:
+            logging.debug(f"Exception while uploading file:{e}")
+            return jsonify({'Exception': f'Failed to upload file {upload_url}:::{str(e)}'}), 500
+        
+        # Update profile with image URL
+        image_url = file_public_url
+        buyer_profile.profile_image = image_url
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Profile image uploaded successfully',
+            'profile': buyer_profile.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'Failed to upload profile image: {str(e)}'
+        }), 500
 
 @buyer.route('/sellers', methods=['GET'])
 @buyer_required
